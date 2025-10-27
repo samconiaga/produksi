@@ -1,7 +1,7 @@
 
-# Laravel LMS SMAN 12
+# Laravel Bahanbaku
 
-Learning Management System untuk SMAN 12 Antang yang dibuat menggunakan framework Laravel
+Bahan Baku PT.Samco Farma yang dibuat menggunakan framework Laravel
 
 
 ## Run Locally
