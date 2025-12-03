@@ -8,7 +8,7 @@
         <h4 class="card-title mb-0">QC Release (Tanggal Datang / Analisa / Release)</h4>
         <p class="mb-0 text-muted">
           Input tanggal QC per tahap (Granul → Tablet → Ruahan → Ruahan Akhir)
-          mengikuti urutan proses produksi.
+          mengikuti urutan proses produksi &amp; tipe alur produk.
         </p>
       </div>
 
@@ -86,7 +86,7 @@
               <th colspan="3" class="text-center bg-light">Produk Ruahan</th>
               <th colspan="3" class="text-center bg-light">Produk Ruahan Akhir</th>
 
-              <th rowspan="2">Aksi</th>
+              <th rowspan="2">Simpan</th>
             </tr>
 
             {{-- Header baris kedua: sub-kolom --}}
@@ -114,12 +114,69 @@
             @php
               $formId = 'qc-form-' . $batch->id;
 
-              // LOGIKA ALUR
-              $canGranul       = !empty($batch->tgl_mixing);
-              $canTablet       = !empty($batch->tgl_tableting);
-              $canRuahan       = !empty($batch->tgl_coating);
-              $canRuahanAkhir  = !empty($batch->tgl_primary_pack);
+              $tipeAlur = $batch->produksi->tipe_alur ?? $batch->tipe_alur ?? '';
+
+              // Mapping flow QC per tipe_alur
+              $hasGranul      = false;
+              $hasTablet      = false;
+              $hasRuahan      = false;
+              $hasRuahanAkhir = false;
+
+              switch ($tipeAlur) {
+                  case 'CLO':
+                      $hasRuahanAkhir = true;
+                      break;
+
+                  case 'CAIRAN_LUAR':
+                      $hasRuahan = true;
+                      break;
+
+                  case 'DRY_SYRUP':
+                      $hasRuahan      = true;
+                      $hasRuahanAkhir = true;
+                      break;
+
+                  case 'TABLET_NON_SALUT':
+                  case 'TABLET_SALUT':
+                      $hasGranul = $hasTablet = $hasRuahan = true;
+                      break;
+
+                  case 'KAPSUL':
+                      $hasGranul = $hasRuahan = true;
+                      break;
+
+                  default:
+                      $hasRuahanAkhir = true;
+                      break;
+              }
+
+              $qcGranulReleased = !empty($batch->tgl_rilis_granul);
+              $qcTabletReleased = !empty($batch->tgl_rilis_tablet);
+              $qcRuahanReleased = !empty($batch->tgl_rilis_ruahan);
+
+              $canGranul = $hasGranul && !empty($batch->tgl_mixing);
+
+              $canTablet = $hasTablet
+                           && !empty($batch->tgl_tableting)
+                           && (!$hasGranul || $qcGranulReleased);
+
+              $canRuahanProcess = !empty($batch->tgl_coating)
+                                  || !empty($batch->tgl_capsule_filling)
+                                  || !empty($batch->tgl_mixing);
+
+              $prevQcForRuahanOk = $hasTablet
+                  ? $qcTabletReleased
+                  : ($hasGranul ? $qcGranulReleased : true);
+
+              $canRuahan = $hasRuahan && $canRuahanProcess && $prevQcForRuahanOk;
+
+              $prevQcForRuahanAkhirOk = $hasRuahan ? $qcRuahanReleased : true;
+
+              $canRuahanAkhir = $hasRuahanAkhir
+                                && !empty($batch->tgl_primary_pack)
+                                && $prevQcForRuahanAkhirOk;
             @endphp
+
             <tr>
               <td>{{ $batches->firstItem() + $index }}</td>
               <td>{{ $batch->produksi->nama_produk ?? $batch->nama_produk }}</td>
@@ -130,131 +187,331 @@
               <td>{{ optional($batch->wo_date)->format('d-m-Y') }}</td>
               <td>{{ optional($batch->tgl_mixing)->format('d-m-Y') }}</td>
 
-              {{-- ====== Granul ====== --}}
+              {{-- ========= GRANUL ========= --}}
+
+              {{-- TGL DATANG + CHECK --}}
               <td>
-                <input type="date"
-                       name="tgl_datang_granul"
-                       form="{{ $formId }}"
-                       value="{{ old('tgl_datang_granul', optional($batch->tgl_datang_granul)->format('Y-m-d')) }}"
-                       class="form-control form-control-sm"
-                       {{ $canGranul ? '' : 'disabled' }}>
-                @unless($canGranul)
-                  <small class="text-muted" style="font-size:0.7rem;">
-                    Menunggu proses Mixing.
-                  </small>
-                @endunless
-              </td>
-              <td>
-                <input type="date"
-                       name="tgl_analisa_granul"
-                       form="{{ $formId }}"
-                       value="{{ old('tgl_analisa_granul', optional($batch->tgl_analisa_granul)->format('Y-m-d')) }}"
-                       class="form-control form-control-sm"
-                       {{ $canGranul ? '' : 'disabled' }}>
-              </td>
-              <td>
-                <input type="date"
-                       name="tgl_rilis_granul"
-                       form="{{ $formId }}"
-                       value="{{ old('tgl_rilis_granul', optional($batch->tgl_rilis_granul)->format('Y-m-d')) }}"
-                       class="form-control form-control-sm"
-                       {{ $canGranul ? '' : 'disabled' }}>
+                @if (! $hasGranul || ! $canGranul)
+                  {!! '&nbsp;' !!}
+                @else
+                  <div class="d-flex align-items-center gap-1">
+                    <input type="date"
+                           name="tgl_datang_granul"
+                           form="{{ $formId }}"
+                           value="{{ old('tgl_datang_granul', optional($batch->tgl_datang_granul)->format('Y-m-d')) }}"
+                           class="form-control form-control-sm">
+
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="action"
+                            value="save"
+                            class="btn btn-sm btn-outline-success"
+                            title="Konfirmasi kedatangan"
+                            onclick="return confirm('Konfirmasi tanggal datang granul?');">
+                      ✓
+                    </button>
+                  </div>
+                @endif
               </td>
 
-              {{-- ====== Tablet ====== --}}
-              <td>
-                <input type="date"
-                       name="tgl_datang_tablet"
-                       form="{{ $formId }}"
-                       value="{{ old('tgl_datang_tablet', optional($batch->tgl_datang_tablet)->format('Y-m-d')) }}"
-                       class="form-control form-control-sm"
-                       {{ $canTablet ? '' : 'disabled' }}>
-                @unless($canTablet)
-                  <small class="text-muted" style="font-size:0.7rem;">
-                    Menunggu proses Tableting.
-                  </small>
-                @endunless
-              </td>
-              <td>
-                <input type="date"
-                       name="tgl_analisa_tablet"
-                       form="{{ $formId }}"
-                       value="{{ old('tgl_analisa_tablet', optional($batch->tgl_analisa_tablet)->format('Y-m-d')) }}"
-                       class="form-control form-control-sm"
-                       {{ $canTablet ? '' : 'disabled' }}>
-              </td>
-              <td>
-                <input type="date"
-                       name="tgl_rilis_tablet"
-                       form="{{ $formId }}"
-                       value="{{ old('tgl_rilis_tablet', optional($batch->tgl_rilis_tablet)->format('Y-m-d')) }}"
-                       class="form-control form-control-sm"
-                       {{ $canTablet ? '' : 'disabled' }}>
+              {{-- ANALISA Start / Stop --}}
+              <td class="text-center">
+                @if (! $hasGranul || ! $canGranul)
+                  {!! '&nbsp;' !!}
+                @else
+                  <div class="d-flex flex-column gap-1 align-items-center">
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="start_analisa_granul"
+                            class="btn btn-sm btn-outline-primary py-0"
+                            {{ $batch->tgl_analisa_granul ? 'disabled' : '' }}>
+                      Start
+                    </button>
+
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="stop_analisa_granul"
+                            class="btn btn-sm btn-outline-secondary py-0"
+                            {{ $batch->tgl_analisa_granul ? '' : 'disabled' }}>
+                      Stop
+                    </button>
+                  </div>
+                @endif
               </td>
 
-              {{-- ====== Ruahan ====== --}}
-              <td>
-                <input type="date"
-                       name="tgl_datang_ruahan"
-                       form="{{ $formId }}"
-                       value="{{ old('tgl_datang_ruahan', optional($batch->tgl_datang_ruahan)->format('Y-m-d')) }}"
-                       class="form-control form-control-sm"
-                       {{ $canRuahan ? '' : 'disabled' }}>
-                @unless($canRuahan)
-                  <small class="text-muted" style="font-size:0.7rem;">
-                    Menunggu proses Coating.
-                  </small>
-                @endunless
-              </td>
-              <td>
-                <input type="date"
-                       name="tgl_analisa_ruahan"
-                       form="{{ $formId }}"
-                       value="{{ old('tgl_analisa_ruahan', optional($batch->tgl_analisa_ruahan)->format('Y-m-d')) }}"
-                       class="form-control form-control-sm"
-                       {{ $canRuahan ? '' : 'disabled' }}>
-              </td>
-              <td>
-                <input type="date"
-                       name="tgl_rilis_ruahan"
-                       form="{{ $formId }}"
-                       value="{{ old('tgl_rilis_ruahan', optional($batch->tgl_rilis_ruahan)->format('Y-m-d')) }}"
-                       class="form-control form-control-sm"
-                       {{ $canRuahan ? '' : 'disabled' }}>
+              {{-- RELEASE Start / Stop --}}
+              <td class="text-center">
+                @if (! $hasGranul || ! $canGranul)
+                  {!! '&nbsp;' !!}
+                @else
+                  <div class="d-flex flex-column gap-1 align-items-center">
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="start_release_granul"
+                            class="btn btn-sm btn-outline-success py-0"
+                            {{ $batch->tgl_rilis_granul ? 'disabled' : '' }}>
+                      Start
+                    </button>
+
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="stop_release_granul"
+                            class="btn btn-sm btn-outline-secondary py-0"
+                            {{ $batch->tgl_rilis_granul ? '' : 'disabled' }}>
+                      Stop
+                    </button>
+                  </div>
+                @endif
               </td>
 
-              {{-- ====== Ruahan Akhir ====== --}}
+              {{-- ========= TABLET ========= --}}
+
+              {{-- TGL DATANG + CHECK --}}
               <td>
-                <input type="date"
-                       name="tgl_datang_ruahan_akhir"
-                       form="{{ $formId }}"
-                       value="{{ old('tgl_datang_ruahan_akhir', optional($batch->tgl_datang_ruahan_akhir)->format('Y-m-d')) }}"
-                       class="form-control form-control-sm"
-                       {{ $canRuahanAkhir ? '' : 'disabled' }}>
-                @unless($canRuahanAkhir)
-                  <small class="text-muted" style="font-size:0.7rem;">
-                    Menunggu Primary Pack selesai.
-                  </small>
-                @endunless
-              </td>
-              <td>
-                <input type="date"
-                       name="tgl_analisa_ruahan_akhir"
-                       form="{{ $formId }}"
-                       value="{{ old('tgl_analisa_ruahan_akhir', optional($batch->tgl_analisa_ruahan_akhir)->format('Y-m-d')) }}"
-                       class="form-control form-control-sm"
-                       {{ $canRuahanAkhir ? '' : 'disabled' }}>
-              </td>
-              <td>
-                <input type="date"
-                       name="tgl_rilis_ruahan_akhir"
-                       form="{{ $formId }}"
-                       value="{{ old('tgl_rilis_ruahan_akhir', optional($batch->tgl_rilis_ruahan_akhir)->format('Y-m-d')) }}"
-                       class="form-control form-control-sm"
-                       {{ $canRuahanAkhir ? '' : 'disabled' }}>
+                @if (! $hasTablet || ! $canTablet)
+                  {!! '&nbsp;' !!}
+                @else
+                  <div class="d-flex align-items-center gap-1">
+                    <input type="date"
+                           name="tgl_datang_tablet"
+                           form="{{ $formId }}"
+                           value="{{ old('tgl_datang_tablet', optional($batch->tgl_datang_tablet)->format('Y-m-d')) }}"
+                           class="form-control form-control-sm">
+
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="action"
+                            value="save"
+                            class="btn btn-sm btn-outline-success"
+                            title="Konfirmasi kedatangan"
+                            onclick="return confirm('Konfirmasi tanggal datang tablet?');">
+                      ✓
+                    </button>
+                  </div>
+                @endif
               </td>
 
-              {{-- Aksi --}}
+              {{-- ANALISA Start / Stop --}}
+              <td class="text-center">
+                @if (! $hasTablet || ! $canTablet)
+                  {!! '&nbsp;' !!}
+                @else
+                  <div class="d-flex flex-column gap-1 align-items-center">
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="start_analisa_tablet"
+                            class="btn btn-sm btn-outline-primary py-0"
+                            {{ $batch->tgl_analisa_tablet ? 'disabled' : '' }}>
+                      Start
+                    </button>
+
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="stop_analisa_tablet"
+                            class="btn btn-sm btn-outline-secondary py-0"
+                            {{ $batch->tgl_analisa_tablet ? '' : 'disabled' }}>
+                      Stop
+                    </button>
+                  </div>
+                @endif
+              </td>
+
+              {{-- RELEASE Start / Stop --}}
+              <td class="text-center">
+                @if (! $hasTablet || ! $canTablet)
+                  {!! '&nbsp;' !!}
+                @else
+                  <div class="d-flex flex-column gap-1 align-items-center">
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="start_release_tablet"
+                            class="btn btn-sm btn-outline-success py-0"
+                            {{ $batch->tgl_rilis_tablet ? 'disabled' : '' }}>
+                      Start
+                    </button>
+
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="stop_release_tablet"
+                            class="btn btn-sm btn-outline-secondary py-0"
+                            {{ $batch->tgl_rilis_tablet ? '' : 'disabled' }}>
+                      Stop
+                    </button>
+                  </div>
+                @endif
+              </td>
+
+              {{-- ========= RUAHAN ========= --}}
+
+              {{-- TGL DATANG + CHECK --}}
+              <td>
+                @if (! $hasRuahan || ! $canRuahan)
+                  {!! '&nbsp;' !!}
+                @else
+                  <div class="d-flex align-items-center gap-1">
+                    <input type="date"
+                           name="tgl_datang_ruahan"
+                           form="{{ $formId }}"
+                           value="{{ old('tgl_datang_ruahan', optional($batch->tgl_datang_ruahan)->format('Y-m-d')) }}"
+                           class="form-control form-control-sm">
+
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="action"
+                            value="save"
+                            class="btn btn-sm btn-outline-success"
+                            title="Konfirmasi kedatangan"
+                            onclick="return confirm('Konfirmasi tanggal datang ruahan?');">
+                      ✓
+                    </button>
+                  </div>
+                @endif
+              </td>
+
+              {{-- ANALISA Start / Stop --}}
+              <td class="text-center">
+                @if (! $hasRuahan || ! $canRuahan)
+                  {!! '&nbsp;' !!}
+                @else
+                  <div class="d-flex flex-column gap-1 align-items-center">
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="start_analisa_ruahan"
+                            class="btn btn-sm btn-outline-primary py-0"
+                            {{ $batch->tgl_analisa_ruahan ? 'disabled' : '' }}>
+                      Start
+                    </button>
+
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="stop_analisa_ruahan"
+                            class="btn btn-sm btn-outline-secondary py-0"
+                            {{ $batch->tgl_analisa_ruahan ? '' : 'disabled' }}>
+                      Stop
+                    </button>
+                  </div>
+                @endif
+              </td>
+
+              {{-- RELEASE Start / Stop --}}
+              <td class="text-center">
+                @if (! $hasRuahan || ! $canRuahan)
+                  {!! '&nbsp;' !!}
+                @else
+                  <div class="d-flex flex-column gap-1 align-items-center">
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="start_release_ruahan"
+                            class="btn btn-sm btn-outline-success py-0"
+                            {{ $batch->tgl_rilis_ruahan ? 'disabled' : '' }}>
+                      Start
+                    </button>
+
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="stop_release_ruahan"
+                            class="btn btn-sm btn-outline-secondary py-0"
+                            {{ $batch->tgl_rilis_ruahan ? '' : 'disabled' }}>
+                      Stop
+                    </button>
+                  </div>
+                @endif
+              </td>
+
+              {{-- ========= RUAHAN AKHIR ========= --}}
+
+              {{-- TGL DATANG + CHECK --}}
+              <td>
+                @if (! $hasRuahanAkhir || ! $canRuahanAkhir)
+                  {!! '&nbsp;' !!}
+                @else
+                  <div class="d-flex align-items-center gap-1">
+                    <input type="date"
+                           name="tgl_datang_ruahan_akhir"
+                           form="{{ $formId }}"
+                           value="{{ old('tgl_datang_ruahan_akhir', optional($batch->tgl_datang_ruahan_akhir)->format('Y-m-d')) }}"
+                           class="form-control form-control-sm">
+
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="action"
+                            value="save"
+                            class="btn btn-sm btn-outline-success"
+                            title="Konfirmasi kedatangan"
+                            onclick="return confirm('Konfirmasi tanggal datang ruahan akhir?');">
+                      ✓
+                    </button>
+                  </div>
+                @endif
+              </td>
+
+              {{-- ANALISA Start / Stop --}}
+              <td class="text-center">
+                @if (! $hasRuahanAkhir || ! $canRuahanAkhir)
+                  {!! '&nbsp;' !!}
+                @else
+                  <div class="d-flex flex-column gap-1 align-items-center">
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="start_analisa_ruahan_akhir"
+                            class="btn btn-sm btn-outline-primary py-0"
+                            {{ $batch->tgl_analisa_ruahan_akhir ? 'disabled' : '' }}>
+                      Start
+                    </button>
+
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="stop_analisa_ruahan_akhir"
+                            class="btn btn-sm btn-outline-secondary py-0"
+                            {{ $batch->tgl_analisa_ruahan_akhir ? '' : 'disabled' }}>
+                      Stop
+                    </button>
+                  </div>
+                @endif
+              </td>
+
+              {{-- RELEASE Start / Stop --}}
+              <td class="text-center">
+                @if (! $hasRuahanAkhir || ! $canRuahanAkhir)
+                  {!! '&nbsp;' !!}
+                @else
+                  <div class="d-flex flex-column gap-1 align-items-center">
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="start_release_ruahan_akhir"
+                            class="btn btn-sm btn-outline-success py-0"
+                            {{ $batch->tgl_rilis_ruahan_akhir ? 'disabled' : '' }}>
+                      Start
+                    </button>
+
+                    <button type="submit"
+                            form="{{ $formId }}"
+                            name="qc_action"
+                            value="stop_release_ruahan_akhir"
+                            class="btn btn-sm btn-outline-secondary py-0"
+                            {{ $batch->tgl_rilis_ruahan_akhir ? '' : 'disabled' }}>
+                      Stop
+                    </button>
+                  </div>
+                @endif
+              </td>
+
+              {{-- FORM SIMPAN --}}
               <td>
                 <form id="{{ $formId }}"
                       action="{{ route('qc-release.update', $batch) }}"
@@ -262,28 +519,12 @@
                   @csrf
                   @method('PUT')
 
-                  <div class="d-flex flex-column flex-lg-row gap-1">
-                    <button type="submit"
-                            name="action"
-                            value="save"
-                            class="btn btn-sm btn-outline-primary w-100">
-                      Simpan
-                    </button>
-
-                    <button type="submit"
-                            name="action"
-                            value="confirm"
-                            class="btn btn-sm btn-primary w-100"
-                            onclick="return confirm('Yakin ingin mengkonfirmasi rilis QC untuk batch {{ $batch->no_batch }}?');">
-                      Konfirmasi
-                    </button>
-                  </div>
-
-                  @if($batch->status_proses === 'QC RELEASED')
-                    <small class="text-success d-block mt-1">
-                      Sudah dikonfirmasi (QC RELEASED).
-                    </small>
-                  @endif
+                  <button type="submit"
+                          name="action"
+                          value="save"
+                          class="btn btn-sm btn-outline-primary w-100">
+                    Simpan
+                  </button>
                 </form>
               </td>
             </tr>

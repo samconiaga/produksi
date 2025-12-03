@@ -10,7 +10,7 @@
           <div>
             <h4 class="card-title mb-0">Capsule Filling</h4>
             <p class="mb-0 text-muted">
-              Menampilkan batch kapsul yang sudah selesai Mixing namun belum dikonfirmasi Capsule Filling.
+              Menampilkan batch kapsul yang sudah selesai Mixing namun belum selesai Capsule Filling.
             </p>
           </div>
 
@@ -84,27 +84,26 @@
                   <th>Tahun</th>
                   <th>WO Date</th>
                   <th>Expected Date</th>
-                  <th>Tgl Mixing</th>
-                  <th>Tgl Mulai Capsule Filling</th>
-                  <th>Tgl Selesai Capsule Filling</th>
+                  <th>Mixing Selesai</th>
+                  <th>Mulai Capsule</th>
+                  <th>Selesai Capsule</th>
                   <th>Aksi</th>
                 </tr>
               </thead>
               <tbody>
               @forelse($batches as $index => $batch)
                 @php
-                  $formId = 'capsule-form-' . $batch->id;
-
-                  $valMulai = $batch->tgl_mulai_capsule_filling
-                    ? \Illuminate\Support\Carbon::parse($batch->tgl_mulai_capsule_filling)->format('Y-m-d')
-                    : now()->format('Y-m-d');
-
-                  // karena di index kita filter whereNull(tgl_capsule_filling),
-                  // default isi hari ini
-                  $valSelesai = $batch->tgl_capsule_filling
-                    ? \Illuminate\Support\Carbon::parse($batch->tgl_capsule_filling)->format('Y-m-d')
-                    : now()->format('Y-m-d');
+                  $mulai  = $batch->tgl_mulai_capsule_filling
+                    ? $batch->tgl_mulai_capsule_filling->format('d-m-Y H:i')
+                    : '-';
+                  $selesai = $batch->tgl_capsule_filling
+                    ? $batch->tgl_capsule_filling->format('d-m-Y H:i')
+                    : '-';
+                  $mixDone = $batch->tgl_mixing
+                    ? $batch->tgl_mixing->format('d-m-Y H:i')
+                    : '-';
                 @endphp
+
                 <tr>
                   <td>{{ $batches->firstItem() + $index }}</td>
                   <td>{{ $batch->produksi->nama_produk ?? $batch->nama_produk }}</td>
@@ -112,54 +111,45 @@
                   <td>{{ $batch->kode_batch }}</td>
                   <td>{{ $batch->bulan }}</td>
                   <td>{{ $batch->tahun }}</td>
-
-                  <td>
-                    {{ $batch->wo_date
-                        ? \Illuminate\Support\Carbon::parse($batch->wo_date)->format('d-m-Y')
-                        : '-' }}
-                  </td>
-                  <td>
-                    {{ $batch->expected_date
-                        ? \Illuminate\Support\Carbon::parse($batch->expected_date)->format('d-m-Y')
-                        : '-' }}
-                  </td>
-                  <td>
-                    {{ $batch->tgl_mixing
-                        ? \Illuminate\Support\Carbon::parse($batch->tgl_mixing)->format('d-m-Y')
-                        : '-' }}
-                  </td>
-
-                  {{-- Tanggal MULAI Capsule Filling --}}
-                  <td>
-                    <input type="date"
-                           name="tgl_mulai_capsule_filling"
-                           form="{{ $formId }}"
-                           value="{{ $valMulai }}"
-                           class="form-control form-control-sm">
-                  </td>
-
-                  {{-- Tanggal SELESAI Capsule Filling --}}
-                  <td>
-                    <input type="date"
-                           name="tgl_capsule_filling"
-                           form="{{ $formId }}"
-                           value="{{ $valSelesai }}"
-                           class="form-control form-control-sm">
-                  </td>
+                  <td>{{ $batch->wo_date ? $batch->wo_date->format('d-m-Y') : '-' }}</td>
+                  <td>{{ $batch->expected_date ? $batch->expected_date->format('d-m-Y') : '-' }}</td>
+                  <td>{{ $mixDone }}</td>
+                  <td>{{ $mulai }}</td>
+                  <td>{{ $selesai }}</td>
 
                   <td class="text-center">
-                    <form id="{{ $formId }}"
-                          action="{{ route('capsule-filling.confirm', $batch) }}"
-                          method="POST">
+
+                    {{-- form START --}}
+                    <form id="capsule-start-{{ $batch->id }}"
+                          action="{{ route('capsule-filling.start', $batch) }}"
+                          method="POST" class="d-inline">
                       @csrf
                     </form>
 
-                    <button type="submit"
-                            form="{{ $formId }}"
-                            class="btn btn-sm btn-primary w-100"
-                            onclick="return confirm('Konfirmasi selesai Capsule Filling untuk batch ini?');">
-                      Konfirmasi
-                    </button>
+                    {{-- form STOP --}}
+                    <form id="capsule-stop-{{ $batch->id }}"
+                          action="{{ route('capsule-filling.stop', $batch) }}"
+                          method="POST" class="d-inline">
+                      @csrf
+                    </form>
+
+                    @if(is_null($batch->tgl_mulai_capsule_filling))
+                      {{-- belum mulai --}}
+                      <button type="submit"
+                              form="capsule-start-{{ $batch->id }}"
+                              class="btn btn-sm btn-outline-primary">
+                        Start
+                      </button>
+                    @elseif(is_null($batch->tgl_capsule_filling))
+                      {{-- sudah mulai, belum selesai --}}
+                      <button type="submit"
+                              form="capsule-stop-{{ $batch->id }}"
+                              class="btn btn-sm btn-primary"
+                              onclick="return confirm('Stop / selesai Capsule Filling untuk batch ini?');">
+                        Stop
+                      </button>
+                    @endif
+
                   </td>
                 </tr>
               @empty

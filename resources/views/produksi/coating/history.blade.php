@@ -92,31 +92,11 @@
                   <td>{{ $batch->bulan }}</td>
                   <td>{{ $batch->tahun }}</td>
 
-                  <td>
-                    {{ $batch->wo_date
-                      ? \Illuminate\Support\Carbon::parse($batch->wo_date)->format('d-m-Y')
-                      : '-' }}
-                  </td>
-                  <td>
-                    {{ $batch->expected_date
-                      ? \Illuminate\Support\Carbon::parse($batch->expected_date)->format('d-m-Y')
-                      : '-' }}
-                  </td>
-                  <td>
-                    {{ $batch->tgl_tableting
-                      ? \Illuminate\Support\Carbon::parse($batch->tgl_tableting)->format('d-m-Y')
-                      : '-' }}
-                  </td>
-                  <td>
-                    {{ $batch->tgl_mulai_coating
-                      ? \Illuminate\Support\Carbon::parse($batch->tgl_mulai_coating)->format('d-m-Y')
-                      : '-' }}
-                  </td>
-                  <td>
-                    {{ $batch->tgl_coating
-                      ? \Illuminate\Support\Carbon::parse($batch->tgl_coating)->format('d-m-Y')
-                      : '-' }}
-                  </td>
+                  <td>{{ $batch->wo_date ? $batch->wo_date->format('d-m-Y') : '-' }}</td>
+                  <td>{{ $batch->expected_date ? $batch->expected_date->format('d-m-Y') : '-' }}</td>
+                  <td>{{ $batch->tgl_tableting ? $batch->tgl_tableting->format('d-m-Y H:i') : '-' }}</td>
+                  <td>{{ $batch->tgl_mulai_coating ? $batch->tgl_mulai_coating->format('d-m-Y H:i') : '-' }}</td>
+                  <td>{{ $batch->tgl_coating ? $batch->tgl_coating->format('d-m-Y H:i') : '-' }}</td>
                 </tr>
               @empty
                 <tr>

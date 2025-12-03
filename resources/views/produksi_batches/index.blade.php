@@ -90,7 +90,7 @@
                 <th>Expected Date</th>
 
                 {{-- urutan proses sesuai Excel --}}
-                <th>Weighing (Mulai s/d Selesai)</th>
+                <th>Weighing</th>
                 <th>Mixing (Mulai s/d Selesai)</th>
                 <th>Tgl Rilis Antara Granul</th>
                 <th>Capsule Filling (Mulai s/d Selesai)</th>
@@ -119,17 +119,9 @@
                   <td>{{ optional($row->wo_date)->format('d-m-Y') }}</td>
                   <td>{{ optional($row->expected_date)->format('d-m-Y') }}</td>
 
-                  {{-- WEIGHING: mulai s/d selesai --}}
+                  {{-- WEIGHING: satu tanggal saja --}}
                   <td>
-                    @php
-                      $mulai = optional($row->tgl_mulai_weighing)->format('d-m-Y');
-                      $selesai = optional($row->tgl_weighing)->format('d-m-Y');
-                    @endphp
-                    @if($mulai || $selesai)
-                      {{ $mulai ?: '-' }}@if($selesai) s/d {{ $selesai }}@endif
-                    @else
-                      -
-                    @endif
+                    {{ optional($row->tgl_weighing)->format('d-m-Y') ?: '-' }}
                   </td>
 
                   {{-- MIXING: mulai s/d selesai --}}
@@ -145,7 +137,7 @@
                     @endif
                   </td>
 
-                  {{-- QC rilis antara granul: pakai tgl_rilis_granul --}}
+                  {{-- QC rilis antara granul --}}
                   <td>{{ optional($row->tgl_rilis_granul)->format('d-m-Y') ?: '-' }}</td>
 
                   {{-- CAPSULE FILLING: mulai s/d selesai --}}
@@ -174,7 +166,7 @@
                     @endif
                   </td>
 
-                  {{-- QC rilis antara tablet: pakai tgl_rilis_tablet --}}
+                  {{-- QC rilis antara tablet --}}
                   <td>{{ optional($row->tgl_rilis_tablet)->format('d-m-Y') ?: '-' }}</td>
 
                   {{-- COATING: mulai s/d selesai --}}
@@ -209,7 +201,7 @@
                   {{-- QC rilis ruahan akhir --}}
                   <td>{{ optional($row->tgl_rilis_ruahan_akhir)->format('d-m-Y') ?: '-' }}</td>
 
-                  {{-- SECONDARY PACK: mulai s/d selesai (pakai kolom 1) --}}
+                  {{-- SECONDARY PACK: mulai s/d selesai --}}
                   <td>
                     @php
                       $mulai = optional($row->tgl_mulai_secondary_pack_1)->format('d-m-Y');

@@ -11,28 +11,28 @@ class CapsuleFillingController extends Controller
      * List batch yang BUTUH Capsule Filling & belum selesai Capsule Filling.
      * Syarat:
      * - tipe_alur = KAPSUL
-     * - tgl_mixing      != null (sudah selesai mixing)
+     * - tgl_mixing       != null (sudah selesai mixing)
+     * - tgl_rilis_granul != null (sudah lewat QC Granul)
      * - tgl_capsule_filling = null (belum diisi)
      */
     public function index(Request $request)
     {
         $search  = trim($request->get('q', ''));
-        $bulan   = $request->get('bulan');   // boleh null / "all"
-        $tahun   = $request->get('tahun');   // boleh null
+        $bulan   = $request->get('bulan');
+        $tahun   = $request->get('tahun');
         $perPage = (int) $request->get('per_page', 25);
         if ($perPage <= 0) {
             $perPage = 25;
         }
 
-        // Hanya alur kapsul yang lewat Capsule Filling
         $alurCapsule = ['KAPSUL'];
 
         $query = ProduksiBatch::with('produksi')
             ->whereIn('tipe_alur', $alurCapsule)
             ->whereNotNull('tgl_mixing')          // sudah mixing
+            ->whereNotNull('tgl_rilis_granul')    // sudah QC granul
             ->whereNull('tgl_capsule_filling');   // belum capsule filling
 
-        // Filter search (produk / no batch / kode batch)
         if ($search !== '') {
             $query->where(function ($q2) use ($search) {
                 $q2->where('nama_produk', 'like', "%{$search}%")
@@ -41,12 +41,10 @@ class CapsuleFillingController extends Controller
             });
         }
 
-        // Filter bulan
         if ($bulan !== null && $bulan !== '' && $bulan !== 'all') {
             $query->where('bulan', (int) $bulan);
         }
 
-        // Filter tahun
         if ($tahun !== null && $tahun !== '') {
             $query->where('tahun', (int) $tahun);
         }
@@ -69,9 +67,6 @@ class CapsuleFillingController extends Controller
 
     /**
      * Riwayat batch yang sudah selesai Capsule Filling.
-     * Syarat:
-     * - tipe_alur = KAPSUL
-     * - tgl_capsule_filling != null
      */
     public function history(Request $request)
     {
@@ -123,13 +118,6 @@ class CapsuleFillingController extends Controller
 
     /**
      * Konfirmasi Capsule Filling per batch.
-     * - tgl_mulai_capsule_filling = tanggal mulai
-     * - tgl_capsule_filling       = tanggal selesai (wajib)
-     *
-     * Setelah konfirmasi:
-     * - batch hilang dari index()
-     * - muncul di history()
-     * - siap diambil step berikutnya (misal ke Coating / Primary Pack, dll)
      */
     public function confirm(Request $request, ProduksiBatch $batch)
     {
@@ -138,14 +126,11 @@ class CapsuleFillingController extends Controller
             'tgl_capsule_filling'       => ['required', 'date'],
         ]);
 
-        // Kalau tanggal mulai kosong, samakan dengan tanggal selesai
         $start = $data['tgl_mulai_capsule_filling'] ?? $data['tgl_capsule_filling'];
 
         $batch->tgl_mulai_capsule_filling = $start;
         $batch->tgl_capsule_filling       = $data['tgl_capsule_filling'];
-
-        // Optional: update status_proses biar kebaca di alur berikutnya
-        $batch->status_proses = 'CAPSULE_FILLING_SELESAI';
+        $batch->status_proses             = 'CAPSULE_FILLING_SELESAI';
 
         $batch->save();
 

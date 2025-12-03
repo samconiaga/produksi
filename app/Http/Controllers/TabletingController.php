@@ -8,31 +8,31 @@ use Illuminate\Http\Request;
 class TabletingController extends Controller
 {
     /**
-     * List batch TABLET yang butuh proses Tableting.
+     * List batch yang BUTUH Tableting & belum selesai Tableting.
      * Syarat:
-     * - tipe_alur = TABLET_NON_SALUT / TABLET_SALUT
-     * - tgl_mixing != null      (sudah selesai Mixing)
-     * - tgl_tableting is null   (belum di-Tableting)
+     * - tipe_alur IN (TABLET_NON_SALUT, TABLET_SALUT)
+     * - tgl_mixing       != null
+     * - tgl_rilis_granul != null (sudah QC granul)
+     * - tgl_tableting    = null  (belum tableting)
      */
     public function index(Request $request)
     {
         $search  = trim($request->get('q', ''));
-        $bulan   = $request->get('bulan');   // boleh null / "all"
-        $tahun   = $request->get('tahun');   // boleh null
-        $perPage = (int) $request->get('per_page', 20);
+        $bulan   = $request->get('bulan');
+        $tahun   = $request->get('tahun');
+        $perPage = (int) $request->get('per_page', 25);
         if ($perPage <= 0) {
-            $perPage = 20;
+            $perPage = 25;
         }
 
-        // Hanya untuk alur tablet
         $alurTablet = ['TABLET_NON_SALUT', 'TABLET_SALUT'];
 
         $query = ProduksiBatch::with('produksi')
             ->whereIn('tipe_alur', $alurTablet)
-            ->whereNotNull('tgl_mixing')     // sudah mixing
-            ->whereNull('tgl_tableting');    // belum tableting
+            ->whereNotNull('tgl_mixing')
+            ->whereNotNull('tgl_rilis_granul')   // sudah QC granul
+            ->whereNull('tgl_tableting');        // belum tableting
 
-        // Filter search (produk / no batch / kode batch)
         if ($search !== '') {
             $query->where(function ($q2) use ($search) {
                 $q2->where('nama_produk', 'like', "%{$search}%")
@@ -41,12 +41,10 @@ class TabletingController extends Controller
             });
         }
 
-        // Filter bulan
         if ($bulan !== null && $bulan !== '' && $bulan !== 'all') {
             $query->where('bulan', (int) $bulan);
         }
 
-        // Filter tahun
         if ($tahun !== null && $tahun !== '') {
             $query->where('tahun', (int) $tahun);
         }
@@ -68,26 +66,23 @@ class TabletingController extends Controller
     }
 
     /**
-     * Riwayat batch TABLET yang sudah selesai Tableting.
-     * Syarat:
-     * - tipe_alur = TABLET_NON_SALUT / TABLET_SALUT
-     * - tgl_tableting != null
+     * Riwayat batch yang sudah selesai Tableting.
      */
     public function history(Request $request)
     {
         $search  = trim($request->get('q', ''));
         $bulan   = $request->get('bulan');
         $tahun   = $request->get('tahun');
-        $perPage = (int) $request->get('per_page', 20);
+        $perPage = (int) $request->get('per_page', 25);
         if ($perPage <= 0) {
-            $perPage = 20;
+            $perPage = 25;
         }
 
         $alurTablet = ['TABLET_NON_SALUT', 'TABLET_SALUT'];
 
         $query = ProduksiBatch::with('produksi')
             ->whereIn('tipe_alur', $alurTablet)
-            ->whereNotNull('tgl_tableting');   // sudah tableting
+            ->whereNotNull('tgl_tableting');
 
         if ($search !== '') {
             $query->where(function ($q2) use ($search) {
@@ -122,13 +117,51 @@ class TabletingController extends Controller
     }
 
     /**
-     * Konfirmasi tanggal Tableting untuk 1 batch.
-     * - tgl_mulai_tableting = tanggal mulai
-     * - tgl_tableting       = tanggal selesai (wajib)
-     *
-     * Setelah konfirmasi:
-     * - batch hilang dari index()
-     * - muncul di history()
+     * START – realtime mulai Tableting (klik tombol Start).
+     * Mengisi tgl_mulai_tableting = now()
+     */
+    public function start(ProduksiBatch $batch)
+    {
+        // Kalau sudah pernah start, jangan diubah lagi
+        if ($batch->tgl_mulai_tableting) {
+            return back()->with('success', 'Tableting untuk batch ini sudah pernah dimulai.');
+        }
+
+        $batch->tgl_mulai_tableting = now();
+        $batch->status_proses       = 'TABLETING_MULAI';
+        $batch->save();
+
+        return back()->with('success', 'Proses Tableting dimulai.');
+    }
+
+    /**
+     * STOP – realtime selesai Tableting (klik tombol Stop).
+     * Mengisi tgl_tableting = now()
+     */
+    public function stop(ProduksiBatch $batch)
+    {
+        // Belum pernah start
+        if (! $batch->tgl_mulai_tableting) {
+            return back()->withErrors([
+                'tableting' => 'Tableting belum dimulai untuk batch ini.',
+            ]);
+        }
+
+        // Sudah pernah selesai
+        if ($batch->tgl_tableting) {
+            return back()->with('success', 'Tableting untuk batch ini sudah selesai sebelumnya.');
+        }
+
+        $batch->tgl_tableting = now();
+        $batch->status_proses = 'TABLETING_SELESAI';
+        $batch->save();
+
+        return back()->with('success', 'Proses Tableting selesai.');
+    }
+
+    /**
+     * Konfirmasi manual Tableting via form (opsional).
+     * Bisa dipakai kalau mau input tanggal manual, bukan realtime Start/Stop.
      */
     public function confirm(Request $request, ProduksiBatch $batch)
     {
@@ -137,19 +170,15 @@ class TabletingController extends Controller
             'tgl_tableting'       => ['required', 'date'],
         ]);
 
-        // Kalau mulai kosong → samakan dengan selesai
         $start = $data['tgl_mulai_tableting'] ?? $data['tgl_tableting'];
 
         $batch->tgl_mulai_tableting = $start;
         $batch->tgl_tableting       = $data['tgl_tableting'];
-
-        // optional: update status_proses
-        $batch->status_proses = 'TABLETING_SELESAI';
-
+        $batch->status_proses       = 'TABLETING_SELESAI';
         $batch->save();
 
         return redirect()
             ->route('tableting.index')
-            ->with('success', 'Tanggal Tableting berhasil dikonfirmasi.');
+            ->with('success', 'Tableting untuk batch tersebut berhasil dikonfirmasi.');
     }
 }

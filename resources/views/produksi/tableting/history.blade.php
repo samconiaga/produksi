@@ -10,7 +10,7 @@
           <div>
             <h4 class="card-title mb-0">Riwayat Tableting</h4>
             <p class="mb-0 text-muted">
-              Menampilkan batch tablet yang sudah dikonfirmasi Tableting.
+              Menampilkan batch tablet yang sudah selesai Tableting.
             </p>
           </div>
 
@@ -74,9 +74,9 @@
                   <th>Tahun</th>
                   <th>WO Date</th>
                   <th>Expected Date</th>
-                  <th>Tgl Mixing</th>
-                  <th>Tgl Mulai Tableting</th>
-                  <th>Tgl Selesai Tableting</th>
+                  <th>Mixing Selesai</th>
+                  <th>Mulai Tableting</th>
+                  <th>Selesai Tableting</th>
                 </tr>
               </thead>
               <tbody>
@@ -90,31 +90,11 @@
                   <td>{{ $batch->bulan }}</td>
                   <td>{{ $batch->tahun }}</td>
 
-                  <td>
-                    {{ $batch->wo_date
-                        ? \Illuminate\Support\Carbon::parse($batch->wo_date)->format('d-m-Y')
-                        : '-' }}
-                  </td>
-                  <td>
-                    {{ $batch->expected_date
-                        ? \Illuminate\Support\Carbon::parse($batch->expected_date)->format('d-m-Y')
-                        : '-' }}
-                  </td>
-                  <td>
-                    {{ $batch->tgl_mixing
-                        ? \Illuminate\Support\Carbon::parse($batch->tgl_mixing)->format('d-m-Y')
-                        : '-' }}
-                  </td>
-                  <td>
-                    {{ $batch->tgl_mulai_tableting
-                        ? \Illuminate\Support\Carbon::parse($batch->tgl_mulai_tableting)->format('d-m-Y')
-                        : '-' }}
-                  </td>
-                  <td>
-                    {{ $batch->tgl_tableting
-                        ? \Illuminate\Support\Carbon::parse($batch->tgl_tableting)->format('d-m-Y')
-                        : '-' }}
-                  </td>
+                  <td>{{ $batch->wo_date ? $batch->wo_date->format('d-m-Y') : '-' }}</td>
+                  <td>{{ $batch->expected_date ? $batch->expected_date->format('d-m-Y') : '-' }}</td>
+                  <td>{{ $batch->tgl_mixing ? $batch->tgl_mixing->format('d-m-Y H:i') : '-' }}</td>
+                  <td>{{ $batch->tgl_mulai_tableting ? $batch->tgl_mulai_tableting->format('d-m-Y H:i') : '-' }}</td>
+                  <td>{{ $batch->tgl_tableting ? $batch->tgl_tableting->format('d-m-Y H:i') : '-' }}</td>
                 </tr>
               @empty
                 <tr>

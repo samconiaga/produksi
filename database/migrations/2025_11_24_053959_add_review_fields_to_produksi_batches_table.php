@@ -9,17 +9,41 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('produksi_batches', function (Blueprint $table) {
+
             // status_review: pending | hold | released | rejected
-            $table->string('status_review')->default('pending')->after('status_coa');
-            $table->date('tgl_review')->nullable()->after('status_review');
-            $table->text('catatan_review')->nullable()->after('tgl_review');
+            if (!Schema::hasColumn('produksi_batches', 'status_review')) {
+                $table->string('status_review')
+                      ->default('pending')
+                      ->after('status_coa');
+            }
+
+            if (!Schema::hasColumn('produksi_batches', 'tgl_review')) {
+                $table->date('tgl_review')
+                      ->nullable()
+                      ->after('status_review');
+            }
+
+            if (!Schema::hasColumn('produksi_batches', 'catatan_review')) {
+                $table->text('catatan_review')
+                      ->nullable()
+                      ->after('tgl_review');
+            }
         });
     }
 
     public function down(): void
     {
         Schema::table('produksi_batches', function (Blueprint $table) {
-            $table->dropColumn(['status_review', 'tgl_review', 'catatan_review']);
+
+            if (Schema::hasColumn('produksi_batches', 'catatan_review')) {
+                $table->dropColumn('catatan_review');
+            }
+            if (Schema::hasColumn('produksi_batches', 'tgl_review')) {
+                $table->dropColumn('tgl_review');
+            }
+            if (Schema::hasColumn('produksi_batches', 'status_review')) {
+                $table->dropColumn('status_review');
+            }
         });
     }
 };

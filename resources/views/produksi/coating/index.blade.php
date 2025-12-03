@@ -11,13 +11,12 @@
           <div>
             <h4 class="card-title mb-0">Coating</h4>
             <p class="mb-0 text-muted">
-              Input & konfirmasi tanggal Coating per batch.
-              Data diambil dari jadwal produksi yang sudah selesai Tableting.
+              Proses realtime Coating per batch (Start / Stop).
+              Data diambil dari batch yang sudah selesai Tableting.
             </p>
           </div>
 
           <div class="d-flex gap-1">
-            {{-- Tombol ke Riwayat Coating --}}
             <a href="{{ route('coating.history') }}" class="btn btn-sm btn-outline-secondary">
               Riwayat Coating
             </a>
@@ -26,7 +25,6 @@
 
         <div class="card-body">
 
-          {{-- FLASH MESSAGE --}}
           @if (session('success'))
             <div class="alert alert-success">{{ session('success') }}</div>
           @endif
@@ -51,7 +49,7 @@
                 </option>
                 @for ($m = 1; $m <= 12; $m++)
                   @php $val = (string) $m; @endphp
-                  <option value="{{ $val }}" {{ (string)$currentBulan === $val ? 'selected' : '' }}>
+                  <option value="{{ $val }}" {{ (string) $currentBulan === $val ? 'selected' : '' }}>
                     {{ str_pad($m, 2, '0', STR_PAD_LEFT) }}
                   </option>
                 @endfor
@@ -84,91 +82,134 @@
                   <th>Tahun</th>
                   <th>WO Date</th>
                   <th>Expected Date</th>
-                  <th>Tgl Tableting</th>
-                  <th>Tgl Mulai Coating</th>
-                  <th>Tgl Coating (Selesai)</th>
-                  <th style="width:210px;">Aksi</th>
+                  <th>Tableting Selesai</th>
+                  <th>Mulai Coating</th>
+                  <th>Selesai Coating</th>
+                  <th style="min-width: 230px;">Aksi</th>
                 </tr>
               </thead>
 
               <tbody>
               @forelse ($batches as $index => $batch)
                 @php
-                  $formId      = 'coating-form-' . $batch->id;
+                  $produk        = $batch->produksi;
+                  $namaProduk    = $produk->nama_produk ?? $batch->nama_produk;
+                  $bentukSediaan = $produk->bentuk_sediaan ?? null;
+
+                  // Hanya tablet salut gula yang multi-step
+                  $isTabletSalutGula = $bentukSediaan &&
+                      \Illuminate\Support\Str::contains(
+                          \Illuminate\Support\Str::lower($bentukSediaan),
+                          'salut gula'
+                      );
+
                   $isEaz       = \Illuminate\Support\Str::contains($batch->kode_batch, 'EAZ-');
                   $canSplitEaz =
                       \Illuminate\Support\Str::contains($batch->kode_batch, 'EA-') &&
                       ! $isEaz;
+
+                  $tabletingDone = $batch->tgl_tableting
+                    ? $batch->tgl_tableting->format('d-m-Y H:i')
+                    : '-';
+
+                  $mulai = $batch->tgl_mulai_coating
+                    ? $batch->tgl_mulai_coating->format('d-m-Y H:i')
+                    : '-';
+
+                  $selesai = $batch->tgl_coating
+                    ? $batch->tgl_coating->format('d-m-Y H:i')
+                    : '-';
                 @endphp
 
                 <tr>
                   <td>{{ $batches->firstItem() + $index }}</td>
-                  <td>{{ $batch->produksi->nama_produk ?? $batch->nama_produk }}</td>
+                  <td>{{ $namaProduk }}</td>
                   <td>{{ $batch->no_batch }}</td>
                   <td>{{ $batch->kode_batch }}</td>
                   <td>{{ $batch->bulan }}</td>
                   <td>{{ $batch->tahun }}</td>
                   <td>{{ $batch->wo_date ? $batch->wo_date->format('d-m-Y') : '-' }}</td>
                   <td>{{ $batch->expected_date ? $batch->expected_date->format('d-m-Y') : '-' }}</td>
-                  <td>{{ $batch->tgl_tableting ? $batch->tgl_tableting->format('d-m-Y') : '-' }}</td>
-
-                  {{-- Input TGL MULAI COATING --}}
-                  <td>
-                    <input type="date"
-                           name="tgl_mulai_coating"
-                           form="{{ $formId }}"
-                           value="{{ old('tgl_mulai_coating', optional($batch->tgl_mulai_coating)->format('Y-m-d')) }}"
-                           class="form-control form-control-sm">
-                  </td>
-
-                  {{-- Input TGL SELESAI COATING --}}
-                  <td>
-                    <input type="date"
-                           name="tgl_coating"
-                           form="{{ $formId }}"
-                           value="{{ old('tgl_coating', optional($batch->tgl_coating)->format('Y-m-d')) }}"
-                           class="form-control form-control-sm">
-                  </td>
+                  <td>{{ $tabletingDone }}</td>
+                  <td>{{ $mulai }}</td>
+                  <td>{{ $selesai }}</td>
 
                   <td>
-                    <div class="d-grid gap-1">
+                    <div class="d-flex flex-wrap gap-1 align-items-center">
 
-                      {{-- BUAT MESIN 2 (EAZ) JIKA MASIH EA- --}}
+                      {{-- MESIN 2 (EAZ) --}}
                       @if ($canSplitEaz)
                         <form action="{{ route('coating.split-eaz', $batch->id) }}"
                               method="POST"
                               onsubmit="return confirm('Buat batch mesin Coating 2 (EAZ)?');">
                           @csrf
-                          <button type="submit" class="btn btn-sm btn-outline-primary w-100">
-                            + Mesin 2 (EAZ)
+                          <button type="submit"
+                                  class="btn btn-sm btn-outline-primary"
+                                  style="white-space: nowrap;">
+                            + EAZ
                           </button>
                         </form>
                       @endif
 
-                      {{-- LINK EDIT DETAIL --}}
-                      <a href="{{ route('coating.edit', $batch->id) }}"
-                         class="btn btn-sm btn-outline-secondary w-100">
-                        Edit
-                      </a>
+                      {{-- AKSI COATING --}}
+                      @if ($isTabletSalutGula)
+                        {{-- Tablet Salut Gula → Kelola multi-step --}}
+                        <a href="{{ route('coating.show', $batch->id) }}"
+                           class="btn btn-sm btn-primary"
+                           style="white-space: nowrap;">
+                          Kelola Coating
+                        </a>
+                      @else
+                        {{-- Produk lain → langsung Start/Stop 1 step (main) --}}
+                        <form id="coating-start-{{ $batch->id }}"
+                              action="{{ route('coating.start', $batch) }}"
+                              method="POST"
+                              class="d-inline">
+                          @csrf
+                          <input type="hidden" name="step" value="main">
+                        </form>
 
-                      {{-- SIMPAN & KONFIRMASI COATING --}}
-                      <form id="{{ $formId }}"
-                            action="{{ route('coating.store', $batch) }}"
-                            method="POST">
-                        @csrf
-                        <button type="submit" class="btn btn-sm btn-primary w-100">
-                          Simpan &amp; Konfirmasi
-                        </button>
-                      </form>
+                        <form id="coating-stop-{{ $batch->id }}"
+                              action="{{ route('coating.stop', $batch) }}"
+                              method="POST"
+                              class="d-inline">
+                          @csrf
+                          <input type="hidden" name="step" value="main">
+                        </form>
 
-                      {{-- HAPUS EAZ JIKA KODE EAZ- --}}
+                        @if(is_null($batch->tgl_mulai_coating))
+                          <button type="submit"
+                                  form="coating-start-{{ $batch->id }}"
+                                  class="btn btn-sm btn-outline-primary"
+                                  style="white-space: nowrap;">
+                            Start
+                          </button>
+                        @elseif(is_null($batch->tgl_coating))
+                          <button type="submit"
+                                  form="coating-stop-{{ $batch->id }}"
+                                  class="btn btn-sm btn-primary"
+                                  style="white-space: nowrap;"
+                                  onclick="return confirm('Stop / selesai Coating untuk batch ini?');">
+                            Stop
+                          </button>
+                        @else
+                          <span class="badge bg-light text-muted"
+                                style="white-space: nowrap;">
+                            Coating Selesai
+                          </span>
+                        @endif
+                      @endif
+
+                      {{-- HAPUS EAZ --}}
                       @if ($isEaz)
                         <form action="{{ route('coating.destroy-eaz', $batch->id) }}"
                               method="POST"
                               onsubmit="return confirm('Hapus baris mesin 2 (EAZ) ini?');">
                           @csrf
                           @method('DELETE')
-                          <button type="submit" class="btn btn-sm btn-outline-danger w-100">
+                          <button type="submit"
+                                  class="btn btn-sm btn-outline-danger"
+                                  style="white-space: nowrap;">
                             Hapus EAZ
                           </button>
                         </form>
@@ -187,7 +228,6 @@
             </table>
           </div>
 
-          {{-- PAGINATION --}}
           {{ $batches->links() }}
 
         </div>

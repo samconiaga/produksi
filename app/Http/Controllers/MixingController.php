@@ -8,19 +8,17 @@ use Illuminate\Http\Request;
 class MixingController extends Controller
 {
     /**
-     * List batch yang BUTUH mixing & belum selesai mixing.
+     * Menampilkan batch yang BELUM selesai mixing.
+     * (Dipakai operator untuk realtime start & stop)
      */
     public function index(Request $request)
     {
         $search = trim($request->get('q', ''));
-        $bulan  = $request->get('bulan');  // boleh null / "all"
-        $tahun  = $request->get('tahun');  // boleh null
-        $perPage = (int) $request->get('per_page', 25);
-        if ($perPage <= 0) {
-            $perPage = 25;
-        }
+        $bulan  = $request->get('bulan');
+        $tahun  = $request->get('tahun');
+        $perPage = max(1, (int) $request->get('per_page', 25));
 
-        // TIPE ALUR YANG LEWAT MIXING
+        // Alur yang memiliki mixing
         $alurMixing = [
             'CAIRAN_LUAR',
             'DRY_SYRUP',
@@ -31,12 +29,9 @@ class MixingController extends Controller
 
         $query = ProduksiBatch::with('produksi')
             ->whereIn('tipe_alur', $alurMixing)
-            // sudah ada WO / weighing
-            ->whereNotNull('tgl_weighing')
-            // yang BELUM selesai mixing
-            ->whereNull('tgl_mixing');
+            ->whereNotNull('tgl_weighing') // sudah weighing
+            ->whereNull('tgl_mixing');     // belum selesai mixing
 
-        // Filter search (produk / no batch / kode batch)
         if ($search !== '') {
             $query->where(function ($q2) use ($search) {
                 $q2->where('nama_produk', 'like', "%{$search}%")
@@ -45,18 +40,15 @@ class MixingController extends Controller
             });
         }
 
-        // Filter bulan kalau dipilih selain "all"
-        if ($bulan !== null && $bulan !== '' && $bulan !== 'all') {
+        if ($bulan && $bulan !== "all") {
             $query->where('bulan', (int) $bulan);
         }
 
-        // Filter tahun kalau diisi
-        if ($tahun !== null && $tahun !== '') {
+        if ($tahun) {
             $query->where('tahun', (int) $tahun);
         }
 
         $batches = $query
-            // urutkan: yang paling awal WO-nya di atas
             ->orderBy('tahun')
             ->orderBy('bulan')
             ->orderBy('wo_date')
@@ -64,26 +56,51 @@ class MixingController extends Controller
             ->paginate($perPage)
             ->withQueryString();
 
-        return view('produksi.mixing.index', [
-            'batches' => $batches,
-            'search'  => $search,
-            'bulan'   => $bulan,
-            'tahun'   => $tahun,
-        ]);
+        return view('produksi.mixing.index', compact('batches', 'search', 'bulan', 'tahun'));
     }
 
+
     /**
-     * Riwayat batch yang sudah selesai mixing (tgl_mixing terisi).
+     * BUTTON START MIXING — REALTIME
+     */
+    public function start(ProduksiBatch $batch)
+    {
+        if (!$batch->tgl_mulai_mixing) {
+            $batch->tgl_mulai_mixing = now(); // waktu realtime
+            $batch->status_proses = 'MIXING_START';
+            $batch->save();
+        }
+
+        return back()->with('success', 'Mixing dimulai.');
+    }
+
+
+    /**
+     * BUTTON STOP MIXING — REALTIME
+     */
+    public function stop(ProduksiBatch $batch)
+    {
+        if (!$batch->tgl_mulai_mixing) {
+            return back()->withErrors(['error' => 'Mixing belum dimulai.']);
+        }
+
+        $batch->tgl_mixing = now(); // waktu realtime
+        $batch->status_proses = 'MIXING_SELESAI';
+        $batch->save();
+
+        return back()->with('success', 'Mixing selesai.');
+    }
+
+
+    /**
+     * History mixing (sudah stop)
      */
     public function history(Request $request)
     {
         $search = trim($request->get('q', ''));
-        $bulan  = $request->get('bulan');  // boleh null / "all"
-        $tahun  = $request->get('tahun');  // boleh null
-        $perPage = (int) $request->get('per_page', 25);
-        if ($perPage <= 0) {
-            $perPage = 25;
-        }
+        $bulan  = $request->get('bulan');
+        $tahun  = $request->get('tahun');
+        $perPage = max(1, (int) $request->get('per_page', 25));
 
         $alurMixing = [
             'CAIRAN_LUAR',
@@ -95,7 +112,7 @@ class MixingController extends Controller
 
         $query = ProduksiBatch::with('produksi')
             ->whereIn('tipe_alur', $alurMixing)
-            ->whereNotNull('tgl_mixing'); // SUDAH mixing
+            ->whereNotNull('tgl_mixing'); // selesai mixing
 
         if ($search !== '') {
             $query->where(function ($q2) use ($search) {
@@ -105,55 +122,19 @@ class MixingController extends Controller
             });
         }
 
-        if ($bulan !== null && $bulan !== '' && $bulan !== 'all') {
+        if ($bulan && $bulan !== "all") {
             $query->where('bulan', (int) $bulan);
         }
 
-        if ($tahun !== null && $tahun !== '') {
+        if ($tahun) {
             $query->where('tahun', (int) $tahun);
         }
 
         $batches = $query
-            ->orderBy('tahun')
-            ->orderBy('bulan')
-            ->orderBy('wo_date')
-            ->orderBy('id')
+            ->orderBy('tgl_mixing', 'desc')
             ->paginate($perPage)
             ->withQueryString();
 
-        return view('produksi.mixing.history', [
-            'batches' => $batches,
-            'search'  => $search,
-            'bulan'   => $bulan,
-            'tahun'   => $tahun,
-        ]);
-    }
-
-    /**
-     * Konfirmasi mixing untuk 1 batch.
-     * - tgl_mulai_mixing = tanggal mulai mixing (boleh kosong, default = tgl_mixing)
-     * - tgl_mixing       = tanggal selesai mixing (wajib)
-     * Setelah disimpan → batch hilang dari index & muncul di history.
-     */
-    public function confirm(Request $request, ProduksiBatch $batch)
-    {
-        $data = $request->validate([
-            'tgl_mulai_mixing' => ['nullable', 'date'],
-            'tgl_mixing'       => ['required', 'date'],
-        ]);
-
-        $start = $data['tgl_mulai_mixing'] ?? $data['tgl_mixing'];
-
-        $batch->tgl_mulai_mixing = $start;
-        $batch->tgl_mixing       = $data['tgl_mixing'];
-
-        // Optional: update status_proses biar kebaca step berikutnya
-        $batch->status_proses    = 'MIXING_SELESAI';
-
-        $batch->save();
-
-        return redirect()
-            ->route('mixing.index')
-            ->with('success', 'Mixing untuk batch tersebut berhasil dikonfirmasi.');
+        return view('produksi.mixing.history', compact('batches', 'search', 'bulan', 'tahun'));
     }
 }

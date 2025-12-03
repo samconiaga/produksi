@@ -11,36 +11,51 @@ return new class extends Migration
         Schema::table('produksi_batches', function (Blueprint $table) {
 
             // Tanggal otomatis saat Qty Batch dikonfirmasi
-            $table->date('tgl_konfirmasi_produksi')
-                  ->nullable()
-                  ->after('status_qty_batch');
+            if (!Schema::hasColumn('produksi_batches', 'tgl_konfirmasi_produksi')) {
+                $table->date('tgl_konfirmasi_produksi')
+                      ->nullable()
+                      ->after('status_qty_batch');
+            }
 
             // Tanggal terima jobsheet (manual input)
-            $table->date('tgl_terima_jobsheet')
-                  ->nullable()
-                  ->after('tgl_konfirmasi_produksi');
+            if (!Schema::hasColumn('produksi_batches', 'tgl_terima_jobsheet')) {
+                $table->date('tgl_terima_jobsheet')
+                      ->nullable()
+                      ->after('tgl_konfirmasi_produksi');
+            }
 
             // Status proses Job Sheet
-            $table->enum('status_jobsheet', ['pending', 'done'])
-                  ->default('pending')
-                  ->after('tgl_terima_jobsheet');
+            if (!Schema::hasColumn('produksi_batches', 'status_jobsheet')) {
+                $table->enum('status_jobsheet', ['pending', 'done'])
+                      ->default('pending')
+                      ->after('tgl_terima_jobsheet');
+            }
 
             // Catatan dari QC Produksi untuk Job Sheet
-            $table->text('catatan_jobsheet')
-                  ->nullable()
-                  ->after('status_jobsheet');
+            if (!Schema::hasColumn('produksi_batches', 'catatan_jobsheet')) {
+                $table->text('catatan_jobsheet')
+                      ->nullable()
+                      ->after('status_jobsheet');
+            }
         });
     }
 
     public function down(): void
     {
         Schema::table('produksi_batches', function (Blueprint $table) {
-            $table->dropColumn([
-                'tgl_konfirmasi_produksi',
-                'tgl_terima_jobsheet',
-                'status_jobsheet',
-                'catatan_jobsheet'
-            ]);
+
+            if (Schema::hasColumn('produksi_batches', 'catatan_jobsheet')) {
+                $table->dropColumn('catatan_jobsheet');
+            }
+            if (Schema::hasColumn('produksi_batches', 'status_jobsheet')) {
+                $table->dropColumn('status_jobsheet');
+            }
+            if (Schema::hasColumn('produksi_batches', 'tgl_terima_jobsheet')) {
+                $table->dropColumn('tgl_terima_jobsheet');
+            }
+            if (Schema::hasColumn('produksi_batches', 'tgl_konfirmasi_produksi')) {
+                $table->dropColumn('tgl_konfirmasi_produksi');
+            }
         });
     }
 };

@@ -50,12 +50,7 @@
             {{-- urutan proses sama dengan tabel WO --}}
             <div class="row g-1">
               <div class="col-md-3">
-                <label class="form-label">Weighing (Mulai)</label>
-                <input type="date" name="tgl_mulai_weighing" class="form-control"
-                       value="{{ optional($batch->tgl_mulai_weighing)->format('Y-m-d') }}">
-              </div>
-              <div class="col-md-3">
-                <label class="form-label">Weighing (Selesai)</label>
+                <label class="form-label">Weighing</label>
                 <input type="date" name="tgl_weighing" class="form-control"
                        value="{{ optional($batch->tgl_weighing)->format('Y-m-d') }}">
               </div>

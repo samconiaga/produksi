@@ -10,7 +10,7 @@
           <div>
             <h4 class="card-title mb-0">Tableting</h4>
             <p class="mb-0 text-muted">
-              Menampilkan batch tablet yang sudah selesai Mixing namun belum dikonfirmasi Tableting.
+              Menampilkan batch tablet yang sudah selesai Mixing namun belum selesai Tableting.
             </p>
           </div>
 
@@ -84,9 +84,9 @@
                   <th>Tahun</th>
                   <th>WO Date</th>
                   <th>Expected Date</th>
-                  <th>Tgl Mixing</th>
-                  <th>Tgl Mulai Tableting</th>
-                  <th>Tgl Selesai Tableting</th>
+                  <th>Mixing Selesai</th>
+                  <th>Mulai Tableting</th>
+                  <th>Selesai Tableting</th>
                   <th>Aksi</th>
                 </tr>
               </thead>
@@ -94,17 +94,19 @@
 
               @forelse($batches as $index => $batch)
                 @php
-                  $formId = 'tableting-form-' . $batch->id;
+                  $mixDone = $batch->tgl_mixing
+                    ? $batch->tgl_mixing->format('d-m-Y H:i')
+                    : '-';
 
-                  $valMulai = $batch->tgl_mulai_tableting
-                    ? \Illuminate\Support\Carbon::parse($batch->tgl_mulai_tableting)->format('Y-m-d')
-                    : now()->format('Y-m-d');
+                  $mulai = $batch->tgl_mulai_tableting
+                    ? $batch->tgl_mulai_tableting->format('d-m-Y H:i')
+                    : '-';
 
-                  // di index pasti tgl_tableting masih null, jadi default hari ini
-                  $valSelesai = $batch->tgl_tableting
-                    ? \Illuminate\Support\Carbon::parse($batch->tgl_tableting)->format('Y-m-d')
-                    : now()->format('Y-m-d');
+                  $selesai = $batch->tgl_tableting
+                    ? $batch->tgl_tableting->format('d-m-Y H:i')
+                    : '-';
                 @endphp
+
                 <tr>
                   <td>{{ $batches->firstItem() + $index }}</td>
 
@@ -114,53 +116,47 @@
                   <td>{{ $batch->bulan }}</td>
                   <td>{{ $batch->tahun }}</td>
 
-                  <td>
-                    {{ $batch->wo_date
-                        ? \Illuminate\Support\Carbon::parse($batch->wo_date)->format('d-m-Y')
-                        : '-' }}
-                  </td>
-                  <td>
-                    {{ $batch->expected_date
-                        ? \Illuminate\Support\Carbon::parse($batch->expected_date)->format('d-m-Y')
-                        : '-' }}
-                  </td>
-                  <td>
-                    {{ $batch->tgl_mixing
-                        ? \Illuminate\Support\Carbon::parse($batch->tgl_mixing)->format('d-m-Y')
-                        : '-' }}
-                  </td>
-
-                  {{-- input TGL MULAI TABLETING --}}
-                  <td>
-                    <input type="date"
-                           name="tgl_mulai_tableting"
-                           form="{{ $formId }}"
-                           value="{{ $valMulai }}"
-                           class="form-control form-control-sm">
-                  </td>
-
-                  {{-- input TGL SELESAI TABLETING --}}
-                  <td>
-                    <input type="date"
-                           name="tgl_tableting"
-                           form="{{ $formId }}"
-                           value="{{ $valSelesai }}"
-                           class="form-control form-control-sm">
-                  </td>
+                  <td>{{ $batch->wo_date ? $batch->wo_date->format('d-m-Y') : '-' }}</td>
+                  <td>{{ $batch->expected_date ? $batch->expected_date->format('d-m-Y') : '-' }}</td>
+                  <td>{{ $mixDone }}</td>
+                  <td>{{ $mulai }}</td>
+                  <td>{{ $selesai }}</td>
 
                   <td class="text-center">
-                    <form id="{{ $formId }}"
-                          action="{{ route('tableting.confirm', $batch) }}"
-                          method="POST">
+
+                    {{-- form START --}}
+                    <form id="tableting-start-{{ $batch->id }}"
+                          action="{{ route('tableting.start', $batch) }}"
+                          method="POST"
+                          class="d-inline">
                       @csrf
                     </form>
 
-                    <button type="submit"
-                            form="{{ $formId }}"
-                            class="btn btn-sm btn-primary w-100"
-                            onclick="return confirm('Konfirmasi selesai Tableting untuk batch ini?');">
-                      Konfirmasi
-                    </button>
+                    {{-- form STOP --}}
+                    <form id="tableting-stop-{{ $batch->id }}"
+                          action="{{ route('tableting.stop', $batch) }}"
+                          method="POST"
+                          class="d-inline">
+                      @csrf
+                    </form>
+
+                    @if(is_null($batch->tgl_mulai_tableting))
+                      {{-- Belum mulai --}}
+                      <button type="submit"
+                              form="tableting-start-{{ $batch->id }}"
+                              class="btn btn-sm btn-outline-primary">
+                        Start
+                      </button>
+                    @elseif(is_null($batch->tgl_tableting))
+                      {{-- Sudah mulai, belum selesai --}}
+                      <button type="submit"
+                              form="tableting-stop-{{ $batch->id }}"
+                              class="btn btn-sm btn-primary"
+                              onclick="return confirm('Stop / selesai Tableting untuk batch ini?');">
+                        Stop
+                      </button>
+                    @endif
+
                   </td>
                 </tr>
               @empty

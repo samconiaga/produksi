@@ -5,12 +5,24 @@ namespace App\Http\Controllers;
 use App\Models\ProduksiBatch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Support\Carbon;
 
 class CoatingController extends Controller
 {
+    /**
+     * Mapping nama step → kolom datetime di tabel.
+     */
+    private array $stepMap = [
+        'main'      => ['mulai' => 'tgl_mulai_coating',           'selesai' => 'tgl_coating'],
+        'inti'      => ['mulai' => 'tgl_mulai_coating_inti',      'selesai' => 'tgl_coating_inti'],
+        'dasar'     => ['mulai' => 'tgl_mulai_coating_dasar',     'selesai' => 'tgl_coating_dasar'],
+        'warna'     => ['mulai' => 'tgl_mulai_coating_warna',     'selesai' => 'tgl_coating_warna'],
+        'polishing' => ['mulai' => 'tgl_mulai_coating_polishing', 'selesai' => 'tgl_coating_polishing'],
+    ];
+
     /* =========================================================
-     * INDEX – daftar batch yang BELUM selesai Coating
-     * (sudah Tableting, tgl_coating masih NULL)
+     * INDEX – batch BELUM selesai Coating
+     * Hanya untuk tipe_alur TABLET_SALUT
      * =======================================================*/
     public function index(Request $request)
     {
@@ -19,10 +31,10 @@ class CoatingController extends Controller
         $tahun  = $request->get('tahun');
 
         $query = ProduksiBatch::with('produksi')
+            ->where('tipe_alur', 'TABLET_SALUT')
             ->whereNotNull('tgl_tableting')  // setelah Tableting
-            ->whereNull('tgl_coating');      // belum selesai Coating (belum dikonfirmasi)
+            ->whereNull('tgl_coating');      // belum selesai Coating (summary)
 
-        // Filter search (produk / no batch / kode batch)
         if ($search !== '') {
             $query->where(function ($q2) use ($search) {
                 $q2->where('nama_produk', 'like', "%{$search}%")
@@ -31,12 +43,10 @@ class CoatingController extends Controller
             });
         }
 
-        // Filter bulan
         if ($bulan !== null && $bulan !== '' && $bulan !== 'all') {
             $query->where('bulan', (int) $bulan);
         }
 
-        // Filter tahun
         if ($tahun !== null && $tahun !== '') {
             $query->where('tahun', (int) $tahun);
         }
@@ -49,17 +59,29 @@ class CoatingController extends Controller
 
         $batches->appends($request->query());
 
-        return view('produksi.coating.index', compact(
-            'batches',
-            'search',
-            'bulan',
-            'tahun'
-        ));
+        return view('produksi.coating.index', [
+            'batches' => $batches,
+            'search'  => $search,
+            'bulan'   => $bulan,
+            'tahun'   => $tahun,
+        ]);
     }
 
     /* =========================================================
-     * HISTORY – daftar batch yang SUDAH selesai Coating
-     * (tgl_coating TIDAK NULL)
+     * HALAMAN DETAIL PER BATCH
+     * =======================================================*/
+    public function show(ProduksiBatch $batch)
+    {
+        $batch->load('produksi');
+
+        return view('produksi.coating.show', [
+            'batch'         => $batch,
+            'isTabletSalut' => $batch->isTabletSalut(),
+        ]);
+    }
+
+    /* =========================================================
+     * HISTORY – batch SUDAH selesai Coating
      * =======================================================*/
     public function history(Request $request)
     {
@@ -68,10 +90,10 @@ class CoatingController extends Controller
         $tahun  = $request->get('tahun');
 
         $query = ProduksiBatch::with('produksi')
+            ->where('tipe_alur', 'TABLET_SALUT')
             ->whereNotNull('tgl_tableting')
-            ->whereNotNull('tgl_coating'); // sudah ada tanggal Coating (riwayat)
+            ->whereNotNull('tgl_coating'); // summary selesai
 
-        // Filter search (produk / no batch / kode batch)
         if ($search !== '') {
             $query->where(function ($q2) use ($search) {
                 $q2->where('nama_produk', 'like', "%{$search}%")
@@ -80,12 +102,10 @@ class CoatingController extends Controller
             });
         }
 
-        // Filter bulan
         if ($bulan !== null && $bulan !== '' && $bulan !== 'all') {
             $query->where('bulan', (int) $bulan);
         }
 
-        // Filter tahun
         if ($tahun !== null && $tahun !== '') {
             $query->where('tahun', (int) $tahun);
         }
@@ -98,75 +118,90 @@ class CoatingController extends Controller
 
         $batches->appends($request->query());
 
-        return view('produksi.coating.history', compact(
-            'batches',
-            'search',
-            'bulan',
-            'tahun'
-        ));
+        return view('produksi.coating.history', [
+            'batches' => $batches,
+            'search'  => $search,
+            'bulan'   => $bulan,
+            'tahun'   => $tahun,
+        ]);
     }
 
-    /* =========================================================
-     * SIMPAN INLINE DARI TABEL INDEX
-     * (Simpan & Konfirmasi Coating)
-     * =======================================================*/
-    public function store(Request $request, ProduksiBatch $batch)
+    /* ====== START / STOP & fungsi EAZ tetap sama persis seperti kodenmu ====== */
+
+    public function start(Request $request, ProduksiBatch $batch)
     {
-        $data = $request->validate([
-            'tgl_mulai_coating' => ['nullable', 'date'],
-            'tgl_coating'       => ['nullable', 'date'],
+        $stepKey = $request->input('step', 'main');
+
+        if (! $batch->isTabletSalut()) {
+            $stepKey = 'main';
+        }
+
+        $cols = $this->stepMap[$stepKey] ?? $this->stepMap['main'];
+
+        if ($batch->{$cols['mulai']}) {
+            return back()->with('success', "Step Coating {$stepKey} sudah pernah dimulai.");
+        }
+
+        $now = Carbon::now();
+
+        $batch->update([
+            $cols['mulai']  => $now,
+            'status_proses' => 'COATING_' . strtoupper($stepKey) . '_MULAI',
         ]);
 
-        $batch->tgl_mulai_coating = $data['tgl_mulai_coating'] ?? null;
-        $batch->tgl_coating       = $data['tgl_coating'] ?? null;
+        if ($stepKey !== 'main' && ! $batch->tgl_mulai_coating) {
+            $batch->update(['tgl_mulai_coating' => $now]);
+        }
+
+        return back()->with('success', "Coating step {$stepKey} dimulai untuk batch tersebut.");
+    }
+
+    public function stop(Request $request, ProduksiBatch $batch)
+    {
+        $stepKey = $request->input('step', 'main');
+
+        if (! $batch->isTabletSalut()) {
+            $stepKey = 'main';
+        }
+
+        $cols = $this->stepMap[$stepKey] ?? $this->stepMap['main'];
+
+        if (! $batch->{$cols['mulai']}) {
+            $batch->{$cols['mulai']} = Carbon::now();
+        }
+
+        if ($batch->{$cols['selesai']}) {
+            return back()->with('success', "Step Coating {$stepKey} sudah selesai sebelumnya.");
+        }
+
+        $now = Carbon::now();
+
+        $batch->{$cols['selesai']} = $now;
+        $batch->status_proses      = 'COATING_' . strtoupper($stepKey) . '_SELESAI';
+
+        if ($stepKey === 'main') {
+            $batch->tgl_coating = $now;
+        } elseif ($stepKey === 'polishing' && ! $batch->tgl_coating) {
+            $batch->tgl_coating = $now;
+        }
+
+        if (! $batch->tgl_mulai_coating) {
+            $batch->tgl_mulai_coating = $batch->{$cols['mulai']} ?? $now;
+        }
+
         $batch->save();
 
-        return back()->with('success', 'Tanggal Coating berhasil disimpan.');
+        return back()->with('success', "Coating step {$stepKey} selesai untuk batch tersebut.");
     }
 
-    /* =========================================================
-     * FORM EDIT SATU BATCH
-     * =======================================================*/
-    public function edit(ProduksiBatch $batch)
-    {
-        return view('produksi.coating.edit', compact('batch'));
-    }
-
-    /* =========================================================
-     * UPDATE DARI HALAMAN EDIT
-     * =======================================================*/
-    public function update(Request $request, ProduksiBatch $batch)
-    {
-        $data = $request->validate([
-            'tgl_mulai_coating' => ['nullable', 'date'],
-            'tgl_coating'       => ['nullable', 'date'],
-        ]);
-
-        $batch->update($data);
-
-        return redirect()
-            ->route('coating.index')
-            ->with('success', 'Data Coating berhasil diperbarui.');
-    }
-
-    /* =========================================================
-     * MESIN 2 (EAZ) – SPLIT & DELETE
-     * =======================================================*/
-
-    /**
-     * Duplikasi batch untuk mesin 2 dengan kode EAZ-...
-     */
     public function splitEaz(ProduksiBatch $batch)
     {
-        // hanya boleh dari kode "EA-"
         if (! Str::contains($batch->kode_batch, 'EA-')) {
             return back()->with('success', 'Batch ini tidak bisa di-split ke EAZ.');
         }
 
-        // generate kode EAZ baru
         $kodeEaz = Str::replaceFirst('EA-', 'EAZ-', $batch->kode_batch);
 
-        // jangan buat kalau sudah ada EAZ-nya
         $sudahAda = ProduksiBatch::where('kode_batch', $kodeEaz)
             ->where('no_batch', $batch->no_batch)
             ->exists();
@@ -175,7 +210,6 @@ class CoatingController extends Controller
             return back()->with('success', 'Mesin 2 (EAZ) sudah pernah dibuat.');
         }
 
-        // clone record
         $new = $batch->replicate();
         $new->kode_batch = $kodeEaz;
         $new->save();
@@ -183,12 +217,8 @@ class CoatingController extends Controller
         return back()->with('success', 'Batch mesin 2 (EAZ) berhasil dibuat.');
     }
 
-    /**
-     * Hapus baris mesin 2 (EAZ).
-     */
     public function destroyEaz(ProduksiBatch $batch)
     {
-        // safety: pastikan memang EAZ
         if (! Str::contains($batch->kode_batch, 'EAZ-')) {
             return back()->with('success', 'Batch ini bukan mesin 2 (EAZ). Tidak dihapus.');
         }

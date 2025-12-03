@@ -18,13 +18,18 @@ use App\Http\Controllers\TabletingController;
 use App\Http\Controllers\CoatingController;
 use App\Http\Controllers\QcReleaseController;
 use App\Http\Controllers\UjiCoaController;
-use App\Http\Controllers\PrimarySecondaryPackController;
+use App\Http\Controllers\PrimaryPackController;
+use App\Http\Controllers\SecondaryPackController;
 use App\Http\Controllers\QtyBatchController;
 use App\Http\Controllers\QcJobSheetController;
 use App\Http\Controllers\CoaController;
 use App\Http\Controllers\SamplingController;
 use App\Http\Controllers\ReviewController;
 use App\Http\Controllers\ReleaseController;
+use App\Http\Controllers\QcGranulController;
+use App\Http\Controllers\QcTabletController;
+use App\Http\Controllers\QcRuahanController;
+use App\Http\Controllers\QcRuahanAkhirController;
 
 /* ============================================================
  * AUTH
@@ -103,19 +108,21 @@ Route::middleware(['auth'])->group(function () {
      * - tgl_weighing
      */
 
-    /* --- Mixing --- */
-    Route::prefix('mixing')->name('mixing.')
-        ->middleware('role:Admin,Produksi')
-        ->group(function () {
-            // List yang BELUM mixing (input + konfirmasi)
-            Route::get('/', [MixingController::class, 'index'])->name('index');
+/* --- Mixing (Realtime) --- */
+Route::prefix('mixing')->name('mixing.')
+    ->middleware('role:Admin,Produksi')
+    ->group(function () {
 
-            // Riwayat mixing (sudah selesai)
-            Route::get('/history', [MixingController::class, 'history'])->name('history');
+        Route::get('/', [MixingController::class, 'index'])->name('index');
+        Route::get('/history', [MixingController::class, 'history'])->name('history');
 
-            // Konfirmasi mixing 1 batch
-            Route::post('/{batch}/confirm', [MixingController::class, 'confirm'])->name('confirm');
-        });
+        // Start (realtime)
+        Route::post('/{batch}/start', [MixingController::class, 'start'])->name('start');
+
+        // Stop (realtime)
+        Route::post('/{batch}/stop', [MixingController::class, 'stop'])->name('stop');
+    });
+
 
     /* --- Capsule Filling --- */
     Route::prefix('capsule-filling')->name('capsule-filling.')
@@ -131,76 +138,104 @@ Route::middleware(['auth'])->group(function () {
             Route::post('/{batch}/confirm', [CapsuleFillingController::class, 'confirm'])->name('confirm');
         });
 
-    /* --- Tableting --- */
-    Route::prefix('tableting')->name('tableting.')
-        ->middleware('role:Admin,Produksi')
-        ->group(function () {
+   /* --- Tableting --- */
+Route::prefix('tableting')->name('tableting.')
+    ->middleware('role:Admin,Produksi')
+    ->group(function () {
+        Route::get('/',        [TabletingController::class, 'index'])->name('index');
+        Route::get('/history', [TabletingController::class, 'history'])->name('history');
 
-            // List batch yang menunggu Tableting
-            Route::get('/', [TabletingController::class, 'index'])->name('index');
+        // Realtime start/stop
+        Route::post('/{batch}/start', [TabletingController::class, 'start'])->name('start');
+        Route::post('/{batch}/stop',  [TabletingController::class, 'stop'])->name('stop');
+    });
 
-            // Riwayat Tableting
-            Route::get('/history', [TabletingController::class, 'history'])->name('history');
 
-            // Konfirmasi Tableting
-            Route::post('/{batch}/confirm', [TabletingController::class, 'confirm'])->name('confirm');
-        });
+  /* --- Coating --- */
+Route::prefix('coating')
+    ->name('coating.')
+    ->middleware(['role:Admin,Produksi,QA'])
+    ->group(function () {
 
-    /* --- Coating --- */
-    Route::prefix('coating')
-        ->name('coating.')
-        ->middleware(['role:Admin,Produksi,QA'])
-        ->group(function () {
+        // list batch yang belum selesai Coating
+        Route::get('/',        [CoatingController::class, 'index'])->name('index');
 
-            // list
-            Route::get('/', [CoatingController::class, 'index'])
-                ->name('index');
+        // riwayat batch yang sudah selesai Coating
+        Route::get('/history', [CoatingController::class, 'history'])->name('history');
 
-            // history
-            Route::get('/history', [CoatingController::class, 'history'])
-                ->name('history');
+        // halaman detail per batch (start/stop step coating)
+        Route::get('/{batch}', [CoatingController::class, 'show'])->name('show');
 
-            // simpan inline dari tabel
-            Route::post('/{batch}', [CoatingController::class, 'store'])
-                ->name('store');
+        // realtime start / stop per step
+        Route::post('/{batch}/start', [CoatingController::class, 'start'])->name('start');
+        Route::post('/{batch}/stop',  [CoatingController::class, 'stop'])->name('stop');
 
-            // halaman edit
-            Route::get('/{batch}/edit', [CoatingController::class, 'edit'])
-                ->name('edit');
+        // mesin 2 (EAZ)
+        Route::post('/{batch}/split-eaz',    [CoatingController::class, 'splitEaz'])->name('split-eaz');
+        Route::delete('/{batch}/destroy-eaz',[CoatingController::class, 'destroyEaz'])->name('destroy-eaz');
+    });
 
-            // update dari halaman edit
-            Route::post('/{batch}/update', [CoatingController::class, 'update'])
-                ->name('update');
 
-            // buat baris mesin 2 (EAZ)
-            Route::post('/{batch}/split-eaz', [CoatingController::class, 'splitEaz'])
-                ->name('split-eaz');
+/* --- Primary Pack --- */
+Route::prefix('primary-pack')->name('primary-pack.')
+    ->middleware('role:Admin,Produksi')
+    ->group(function () {
+        Route::get('/',        [PrimaryPackController::class, 'index'])->name('index');
+        Route::get('/history', [PrimaryPackController::class, 'history'])->name('history');
 
-            // hapus baris mesin 2 (EAZ)
-            Route::delete('/{batch}/destroy-eaz', [CoatingController::class, 'destroyEaz'])
-                ->name('destroy-eaz');
-        });
+        // Start / Stop style
+        Route::post('/{batch}/start', [PrimaryPackController::class, 'start'])->name('start');
+        Route::post('/{batch}/stop',  [PrimaryPackController::class, 'stop'])->name('stop');
+    });
 
-    /* --- Primary + Secondary Pack --- */
-    Route::prefix('primary-secondary-pack')->name('primary-secondary.')
-        ->middleware('role:Admin,Produksi')
-        ->group(function () {
-            // daftar + input tanggal
-            Route::get('/', [PrimarySecondaryPackController::class, 'index'])->name('index');
 
-            // history
-            Route::get('/history', [PrimarySecondaryPackController::class, 'history'])->name('history');
+/* --- Secondary Pack --- */
+Route::prefix('secondary-pack')->name('secondary-pack.')
+    ->middleware('role:Admin,Produksi')
+    ->group(function () {
+        Route::get('/',        [SecondaryPackController::class, 'index'])->name('index');
+        Route::get('/history', [SecondaryPackController::class, 'history'])->name('history');
 
-            // Simpan tanggal
-            Route::post('/{batch}', [PrimarySecondaryPackController::class, 'store'])->name('store');
+        // Start / Stop style
+        Route::post('/{batch}/start', [SecondaryPackController::class, 'start'])->name('start');
+        Route::post('/{batch}/stop',  [SecondaryPackController::class, 'stop'])->name('stop');
 
-            // Konfirmasi tanggal
-            Route::post('/{batch}/confirm', [PrimarySecondaryPackController::class, 'confirm'])->name('confirm');
+        // Qty Batch sesudah Secondary selesai
+        Route::get('/{batch}/qty',  [SecondaryPackController::class, 'qtyForm'])->name('qty.form');
+        Route::post('/{batch}/qty', [SecondaryPackController::class, 'qtySave'])->name('qty.save');
+    });
 
-            // Halaman qty batch (input qty)
-            Route::get('/{batch}/qty', [PrimarySecondaryPackController::class, 'qtyForm'])->name('qty.form');
-            Route::post('/{batch}/qty', [PrimarySecondaryPackController::class, 'qtySave'])->name('qty.save');
-        });
+// =================== QC GRANUL ===================
+Route::get('/qc-granul', [QcGranulController::class, 'index'])
+    ->name('qc-granul.index');
+Route::get('/qc-granul/history', [QcGranulController::class, 'history'])
+    ->name('qc-granul.history');
+Route::put('/qc-granul/{batch}', [QcGranulController::class, 'update'])
+    ->name('qc-granul.update');
+
+// =================== QC TABLET ===================
+Route::get('/qc-tablet', [QcTabletController::class, 'index'])
+    ->name('qc-tablet.index');
+Route::get('/qc-tablet/history', [QcTabletController::class, 'history'])
+    ->name('qc-tablet.history');
+Route::put('/qc-tablet/{batch}', [QcTabletController::class, 'update'])
+    ->name('qc-tablet.update');
+
+// =================== QC RUAHAN ===================
+Route::get('/qc-ruahan', [QcRuahanController::class, 'index'])
+    ->name('qc-ruahan.index');
+Route::get('/qc-ruahan/history', [QcRuahanController::class, 'history'])
+    ->name('qc-ruahan.history');
+Route::put('/qc-ruahan/{batch}', [QcRuahanController::class, 'update'])
+    ->name('qc-ruahan.update');
+
+// ============== QC RUAHAN AKHIR ==================
+Route::get('/qc-ruahan-akhir', [QcRuahanAkhirController::class, 'index'])
+    ->name('qc-ruahan-akhir.index');
+Route::get('/qc-ruahan-akhir/history', [QcRuahanAkhirController::class, 'history'])
+    ->name('qc-ruahan-akhir.history');
+Route::put('/qc-ruahan-akhir/{batch}', [QcRuahanAkhirController::class, 'update'])
+    ->name('qc-ruahan-akhir.update');
 
     /* --- Qty Batch menu (setelah Secondary Pack) --- */
     Route::prefix('qty-batch')->name('qty-batch.')

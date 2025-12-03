@@ -3,6 +3,7 @@
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -17,25 +18,29 @@ return new class extends Migration
                       ->after('status_jobsheet');
             }
 
-            // Pastikan kolom status_sampling belum ada, jika belum -> buat baru
+            // Kalau kolom status_sampling BELUM ada -> buat baru
             if (!Schema::hasColumn('produksi_batches', 'status_sampling')) {
                 $table->enum('status_sampling', ['pending', 'accepted', 'rejected', 'confirmed'])
                       ->default('pending')
                       ->after('tgl_sampling');
-            } else {
-                // Jika sudah ada → ubah ENUM tanpa error
-                $table->enum('status_sampling', ['pending', 'accepted', 'rejected', 'confirmed'])
-                      ->default('pending')
-                      ->change();
             }
         });
+
+        // Kalau kolom status_sampling SUDAH ada, ubah set ENUM-nya via raw SQL
+        if (Schema::hasColumn('produksi_batches', 'status_sampling')) {
+            DB::statement("
+                ALTER TABLE `produksi_batches`
+                MODIFY `status_sampling`
+                ENUM('pending', 'accepted', 'rejected', 'confirmed')
+                DEFAULT 'pending'
+            ");
+        }
     }
 
     public function down(): void
     {
         Schema::table('produksi_batches', function (Blueprint $table) {
 
-            // aman: cek dulu sebelum menghapus
             if (Schema::hasColumn('produksi_batches', 'status_sampling')) {
                 $table->dropColumn('status_sampling');
             }
