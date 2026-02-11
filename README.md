@@ -9,13 +9,13 @@ Bahan Baku PT.Samco Farma yang dibuat menggunakan framework Laravel
 Clone the project
 
 ```bash
-  git clone https://github.com/alwijein/laravel_lms_sman12.git
+  git clone https://github.com/samconiaga/produksi.git
 ```
 
 Go to the project directory
 
 ```bash
-  cd laravel_lms_sman12
+  cd produksi
 ```
 
 Install dependencies
@@ -66,5 +66,5 @@ Start the server
 
 ## Feedback
 
-If you have any feedback, please reach out to us at alwijein@gmail.com
+If you have any feedback, please reach out to us at damarelang1@gmail.com.com
 
