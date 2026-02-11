@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 
 class UserController extends Controller
 {
@@ -15,7 +16,8 @@ class UserController extends Controller
      * =======================================================*/
     public function showPPIC()
     {
-        $users = User::where('role', 'PPIC')
+        $users = User::query()
+            ->where('role', 'PPIC')
             ->orderBy('name')
             ->get();
 
@@ -24,28 +26,27 @@ class UserController extends Controller
 
     public function storePPIC(Request $request)
     {
-        $request->validate([
-            'name'     => ['required', 'min:3'],
-            'email'    => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'min:7'],
+        $data = $request->validate([
+            'name'     => ['required', 'string', 'min:3', 'max:255'],
+            'email'    => ['required', 'email', 'max:255', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:7'],
         ]);
 
         User::create([
-            'name'              => $request->name,
-            'email'             => $request->email,
+            'name'              => $data['name'],
+            'email'             => $data['email'],
             'role'              => 'PPIC',
             'email_verified_at' => now(),
-            'password'          => Hash::make($request->password),
+            'password'          => Hash::make($data['password']),
         ]);
 
-        return redirect()
-            ->route('show-ppic')
-            ->with('success', 'Akun PPIC berhasil dibuat.');
+        return redirect()->route('show-ppic')->with('success', 'Akun PPIC berhasil dibuat.');
     }
 
     public function editPPIC($id)
     {
-        $ppic = User::where('id', $id)
+        $ppic = User::query()
+            ->where('id', $id)
             ->where('role', 'PPIC')
             ->firstOrFail();
 
@@ -54,37 +55,37 @@ class UserController extends Controller
 
     public function updatePPIC(Request $request, $id)
     {
-        $request->validate([
-            'name'     => ['required', 'min:3'],
-            'email'    => ['required', 'email', 'unique:users,email,' . $id],
-            'password' => ['nullable', 'min:7'],
+        $data = $request->validate([
+            'name'     => ['required', 'string', 'min:3', 'max:255'],
+            'email'    => ['required', 'email', 'max:255', 'unique:users,email,' . $id],
+            'password' => ['nullable', 'string', 'min:7'],
         ]);
 
-        $data = [
-            'name'  => $request->name,
-            'email' => $request->email,
+        $update = [
+            'name'  => $data['name'],
+            'email' => $data['email'],
         ];
 
-        if ($request->filled('password')) {
-            $data['password'] = Hash::make($request->password);
+        if (!empty($data['password'])) {
+            $update['password'] = Hash::make($data['password']);
         }
 
-        User::where('id', $id)
+        User::query()
+            ->where('id', $id)
             ->where('role', 'PPIC')
-            ->update($data);
+            ->update($update);
 
-        return redirect()
-            ->route('show-ppic')
-            ->with('success', 'Akun PPIC diperbarui.');
+        return redirect()->route('show-ppic')->with('success', 'Akun PPIC diperbarui.');
     }
 
     /* =========================================================
-     * PRODUKSI
-     * (biarkan tetap ada kalau masih dipakai)
+     * PRODUKSI (ADMIN | OPERATOR | SPV)
      * =======================================================*/
     public function showProduksi()
     {
-        $users = User::where('role', 'Produksi')
+        $users = User::query()
+            ->where('role', 'Produksi')
+            ->orderBy('produksi_role')
             ->orderBy('name')
             ->get();
 
@@ -93,28 +94,29 @@ class UserController extends Controller
 
     public function storeProduksi(Request $request)
     {
-        $request->validate([
-            'name'     => ['required', 'min:3'],
-            'email'    => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'min:7'],
+        $data = $request->validate([
+            'name'          => ['required', 'string', 'min:3', 'max:255'],
+            'email'         => ['required', 'email', 'max:255', 'unique:users,email'],
+            'password'      => ['required', 'string', 'min:7'],
+            'produksi_role' => ['required', 'in:ADMIN,OPERATOR,SPV'],
         ]);
 
         User::create([
-            'name'              => $request->name,
-            'email'             => $request->email,
+            'name'              => $data['name'],
+            'email'             => $data['email'],
             'role'              => 'Produksi',
+            'produksi_role'     => $data['produksi_role'], // ADMIN/SPV/OPERATOR
             'email_verified_at' => now(),
-            'password'          => Hash::make($request->password),
+            'password'          => Hash::make($data['password']),
         ]);
 
-        return redirect()
-            ->route('show-produksi')
-            ->with('success', 'Akun Produksi berhasil dibuat.');
+        return redirect()->route('show-produksi')->with('success', 'Akun Produksi berhasil dibuat.');
     }
 
     public function editProduksi($id)
     {
-        $produksi = User::where('id', $id)
+        $produksi = User::query()
+            ->where('id', $id)
             ->where('role', 'Produksi')
             ->firstOrFail();
 
@@ -123,36 +125,38 @@ class UserController extends Controller
 
     public function updateProduksi(Request $request, $id)
     {
-        $request->validate([
-            'name'     => ['required', 'min:3'],
-            'email'    => ['required', 'email', 'unique:users,email,' . $id],
-            'password' => ['nullable', 'min:7'],
+        $data = $request->validate([
+            'name'          => ['required', 'string', 'min:3', 'max:255'],
+            'email'         => ['required', 'email', 'max:255', 'unique:users,email,' . $id],
+            'password'      => ['nullable', 'string', 'min:7'],
+            'produksi_role' => ['required', 'in:ADMIN,OPERATOR,SPV'],
         ]);
 
-        $data = [
-            'name'  => $request->name,
-            'email' => $request->email,
+        $update = [
+            'name'          => $data['name'],
+            'email'         => $data['email'],
+            'produksi_role' => $data['produksi_role'],
         ];
 
-        if ($request->filled('password')) {
-            $data['password'] = Hash::make($request->password);
+        if (!empty($data['password'])) {
+            $update['password'] = Hash::make($data['password']);
         }
 
-        User::where('id', $id)
+        User::query()
+            ->where('id', $id)
             ->where('role', 'Produksi')
-            ->update($data);
+            ->update($update);
 
-        return redirect()
-            ->route('show-produksi')
-            ->with('success', 'Akun Produksi diperbarui.');
+        return redirect()->route('show-produksi')->with('success', 'Akun Produksi diperbarui.');
     }
 
     /* =========================================================
-     * QC
+     * QC (dengan level + barcode tanda tangan)
      * =======================================================*/
     public function showQC()
     {
-        $users = User::where('role', 'QC')
+        $users = User::query()
+            ->where('role', 'QC')
             ->orderBy('name')
             ->get();
 
@@ -161,28 +165,36 @@ class UserController extends Controller
 
     public function storeQC(Request $request)
     {
-        $request->validate([
-            'name'     => ['required', 'min:3'],
-            'email'    => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'min:7'],
+        $data = $request->validate([
+            'name'         => ['required', 'string', 'min:3', 'max:255'],
+            'email'        => ['required', 'email', 'max:255', 'unique:users,email'],
+            'password'     => ['required', 'string', 'min:7'],
+            'qc_level'     => ['required', 'in:QC,MANAGER,SPV'],
+            'qr_signature' => ['nullable', 'image', 'max:2048'],
         ]);
+
+        $path = null;
+        if ($request->hasFile('qr_signature')) {
+            $path = $request->file('qr_signature')->store('qc-signatures', 'public');
+        }
 
         User::create([
-            'name'              => $request->name,
-            'email'             => $request->email,
+            'name'              => $data['name'],
+            'email'             => $data['email'],
             'role'              => 'QC',
+            'qc_level'          => $data['qc_level'],
+            'qc_signature_path' => $path,
             'email_verified_at' => now(),
-            'password'          => Hash::make($request->password),
+            'password'          => Hash::make($data['password']),
         ]);
 
-        return redirect()
-            ->route('show-qc')
-            ->with('success', 'Akun QC berhasil dibuat.');
+        return redirect()->route('show-qc')->with('success', 'Akun QC berhasil dibuat.');
     }
 
     public function editQC($id)
     {
-        $qc = User::where('id', $id)
+        $qc = User::query()
+            ->where('id', $id)
             ->where('role', 'QC')
             ->firstOrFail();
 
@@ -191,28 +203,39 @@ class UserController extends Controller
 
     public function updateQC(Request $request, $id)
     {
-        $request->validate([
-            'name'     => ['required', 'min:3'],
-            'email'    => ['required', 'email', 'unique:users,email,' . $id],
-            'password' => ['nullable', 'min:7'],
+        $data = $request->validate([
+            'name'         => ['required', 'string', 'min:3', 'max:255'],
+            'email'        => ['required', 'email', 'max:255', 'unique:users,email,' . $id],
+            'password'     => ['nullable', 'string', 'min:7'],
+            'qc_level'     => ['required', 'in:QC,MANAGER,SPV'],
+            'qr_signature' => ['nullable', 'image', 'max:2048'],
         ]);
 
-        $data = [
-            'name'  => $request->name,
-            'email' => $request->email,
+        $qc = User::query()
+            ->where('id', $id)
+            ->where('role', 'QC')
+            ->firstOrFail();
+
+        $update = [
+            'name'     => $data['name'],
+            'email'    => $data['email'],
+            'qc_level' => $data['qc_level'],
         ];
 
-        if ($request->filled('password')) {
-            $data['password'] = Hash::make($request->password);
+        if (!empty($data['password'])) {
+            $update['password'] = Hash::make($data['password']);
         }
 
-        User::where('id', $id)
-            ->where('role', 'QC')
-            ->update($data);
+        if ($request->hasFile('qr_signature')) {
+            if ($qc->qc_signature_path && Storage::disk('public')->exists($qc->qc_signature_path)) {
+                Storage::disk('public')->delete($qc->qc_signature_path);
+            }
+            $update['qc_signature_path'] = $request->file('qr_signature')->store('qc-signatures', 'public');
+        }
 
-        return redirect()
-            ->route('show-qc')
-            ->with('success', 'Akun QC diperbarui.');
+        $qc->update($update);
+
+        return redirect()->route('show-qc')->with('success', 'Akun QC diperbarui.');
     }
 
     /* =========================================================
@@ -220,7 +243,8 @@ class UserController extends Controller
      * =======================================================*/
     public function showQA()
     {
-        $users = User::where('role', 'QA')
+        $users = User::query()
+            ->where('role', 'QA')
             ->orderBy('name')
             ->get();
 
@@ -229,28 +253,27 @@ class UserController extends Controller
 
     public function storeQA(Request $request)
     {
-        $request->validate([
-            'name'     => ['required', 'min:3'],
-            'email'    => ['required', 'email', 'unique:users,email'],
-            'password' => ['required', 'min:7'],
+        $data = $request->validate([
+            'name'     => ['required', 'string', 'min:3', 'max:255'],
+            'email'    => ['required', 'email', 'max:255', 'unique:users,email'],
+            'password' => ['required', 'string', 'min:7'],
         ]);
 
         User::create([
-            'name'              => $request->name,
-            'email'             => $request->email,
+            'name'              => $data['name'],
+            'email'             => $data['email'],
             'role'              => 'QA',
             'email_verified_at' => now(),
-            'password'          => Hash::make($request->password),
+            'password'          => Hash::make($data['password']),
         ]);
 
-        return redirect()
-            ->route('show-qa')
-            ->with('success', 'Akun QA berhasil dibuat.');
+        return redirect()->route('show-qa')->with('success', 'Akun QA berhasil dibuat.');
     }
 
     public function editQA($id)
     {
-        $qa = User::where('id', $id)
+        $qa = User::query()
+            ->where('id', $id)
             ->where('role', 'QA')
             ->firstOrFail();
 
@@ -259,28 +282,27 @@ class UserController extends Controller
 
     public function updateQA(Request $request, $id)
     {
-        $request->validate([
-            'name'     => ['required', 'min:3'],
-            'email'    => ['required', 'email', 'unique:users,email,' . $id],
-            'password' => ['nullable', 'min:7'],
+        $data = $request->validate([
+            'name'     => ['required', 'string', 'min:3', 'max:255'],
+            'email'    => ['required', 'email', 'max:255', 'unique:users,email,' . $id],
+            'password' => ['nullable', 'string', 'min:7'],
         ]);
 
-        $data = [
-            'name'  => $request->name,
-            'email' => $request->email,
+        $update = [
+            'name'  => $data['name'],
+            'email' => $data['email'],
         ];
 
-        if ($request->filled('password')) {
-            $data['password'] = Hash::make($request->password);
+        if (!empty($data['password'])) {
+            $update['password'] = Hash::make($data['password']);
         }
 
-        User::where('id', $id)
+        User::query()
+            ->where('id', $id)
             ->where('role', 'QA')
-            ->update($data);
+            ->update($update);
 
-        return redirect()
-            ->route('show-qa')
-            ->with('success', 'Akun QA diperbarui.');
+        return redirect()->route('show-qa')->with('success', 'Akun QA diperbarui.');
     }
 
     /* =========================================================
@@ -288,20 +310,19 @@ class UserController extends Controller
      * =======================================================*/
     public function loginAsPPIC($id)
     {
-        // pastikan user yang dituju benar-benar PPIC
-        $ppic = User::where('id', $id)
+        $ppic = User::query()
+            ->where('id', $id)
             ->where('role', 'PPIC')
             ->firstOrFail();
 
-        // simpan id admin yang lagi login (opsional, kalau mau nanti "kembali sebagai admin")
-        if (! session()->has('impersonator_id')) {
+        if (!session()->has('impersonator_id')) {
             session(['impersonator_id' => Auth::id()]);
         }
 
         Auth::login($ppic);
 
-        // sesuaikan redirect-nya kalau ada dashboard khusus PPIC
-        return redirect()->route('dashboard')->with('success', 'Sekarang login sebagai PPIC: ' . $ppic->name);
+        return redirect()->route('dashboard')
+            ->with('success', 'Sekarang login sebagai PPIC: ' . $ppic->name);
     }
 
     /* =========================================================
@@ -311,29 +332,32 @@ class UserController extends Controller
     {
         $user = User::findOrFail($id);
         $role = $user->role;
+
+        if ($role === 'QC' && $user->qc_signature_path) {
+            if (Storage::disk('public')->exists($user->qc_signature_path)) {
+                Storage::disk('public')->delete($user->qc_signature_path);
+            }
+        }
+
         $user->delete();
 
-        if ($role === 'Produksi') {
-            return redirect()->route('show-produksi')->with('success', 'Akun Produksi dihapus.');
-        }
-        if ($role === 'QC') {
-            return redirect()->route('show-qc')->with('success', 'Akun QC dihapus.');
-        }
-        if ($role === 'QA') {
-            return redirect()->route('show-qa')->with('success', 'Akun QA dihapus.');
-        }
-        if ($role === 'PPIC') {
-            return redirect()->route('show-ppic')->with('success', 'Akun PPIC dihapus.');
-        }
-
-        // fallback
-        return redirect()->route('dashboard')->with('success', 'Akun dihapus.');
+        return match ($role) {
+            'Produksi' => redirect()->route('show-produksi')->with('success', 'Akun Produksi dihapus.'),
+            'QC'       => redirect()->route('show-qc')->with('success', 'Akun QC dihapus.'),
+            'QA'       => redirect()->route('show-qa')->with('success', 'Akun QA dihapus.'),
+            'PPIC'     => redirect()->route('show-ppic')->with('success', 'Akun PPIC dihapus.'),
+            default    => redirect()->route('dashboard')->with('success', 'Akun dihapus.'),
+        };
     }
 
-    public function logout()
+    public function logout(Request $request)
     {
         Auth::logout();
-        return redirect('/');
+
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
+
+        return redirect()->route('login');
     }
 
     public function profile()
@@ -344,14 +368,14 @@ class UserController extends Controller
 
     public function updateGeneral(Request $request)
     {
-        $request->validate([
-            'name'  => ['required', 'min:3'],
-            'email' => ['required', 'email', 'unique:users,email,' . Auth::id()],
+        $data = $request->validate([
+            'name'  => ['required', 'string', 'min:3', 'max:255'],
+            'email' => ['required', 'email', 'max:255', 'unique:users,email,' . Auth::id()],
         ]);
 
         User::where('id', Auth::id())->update([
-            'name'  => $request->name,
-            'email' => $request->email,
+            'name'  => $data['name'],
+            'email' => $data['email'],
         ]);
 
         return redirect()->route('show-profile')->with('success', 'Profil diperbarui.');
@@ -359,13 +383,13 @@ class UserController extends Controller
 
     public function updatePassword(Request $request)
     {
-        $request->validate([
-            'new_password'         => ['required', 'min:7'],
+        $data = $request->validate([
+            'new_password'         => ['required', 'string', 'min:7'],
             'confirm_new_password' => ['required', 'same:new_password'],
         ]);
 
         User::where('id', Auth::id())->update([
-            'password' => Hash::make($request->new_password),
+            'password' => Hash::make($data['new_password']),
         ]);
 
         return redirect()->route('show-profile')->with('success', 'Password diganti.');

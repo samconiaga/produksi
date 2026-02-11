@@ -1,173 +1,397 @@
 @extends('layouts.app')
 
 @section('content')
-<section class="app-user-list">
-  <div class="row" id="basic-table">
-    <div class="col-12">
-      <div class="card">
+<section class="app-user">
+  <div class="card">
 
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <div>
-            <h4 class="card-title mb-0">Capsule Filling</h4>
-            <p class="mb-0 text-muted">
-              Menampilkan batch kapsul yang sudah selesai Mixing namun belum selesai Capsule Filling.
-            </p>
-          </div>
-
-          <a href="{{ route('capsule-filling.history') }}" class="btn btn-sm btn-outline-secondary">
-            Riwayat Capsule Filling
-          </a>
-        </div>
-
-        <div class="card-body">
-
-          @if(session('success'))
-            <div class="alert alert-success">{{ session('success') }}</div>
-          @endif
-
-          @if($errors->any())
-            <div class="alert alert-danger">
-              {{ $errors->first() }}
-            </div>
-          @endif
-
-          {{-- Filter --}}
-          <form method="GET" action="{{ route('capsule-filling.index') }}" class="row g-2 mb-3">
-            <div class="col-md-4">
-              <input type="text"
-                     name="q"
-                     class="form-control"
-                     placeholder="Cari produk / no batch / kode batch"
-                     value="{{ $search ?? request('q') }}">
-            </div>
-
-            <div class="col-md-3">
-              @php
-                $currentBulan = $bulan ?? request('bulan', 'all');
-              @endphp
-              <select name="bulan" class="form-control">
-                <option value="all" {{ $currentBulan === 'all' || $currentBulan === null ? 'selected' : '' }}>
-                  Semua Bulan
-                </option>
-                @for($m = 1; $m <= 12; $m++)
-                  @php $val = (string) $m; @endphp
-                  <option value="{{ $val }}" {{ (string)$currentBulan === $val ? 'selected' : '' }}>
-                    {{ str_pad($m, 2, '0', STR_PAD_LEFT) }}
-                  </option>
-                @endfor
-              </select>
-            </div>
-
-            <div class="col-md-2">
-              <input type="number"
-                     name="tahun"
-                     class="form-control"
-                     placeholder="Tahun"
-                     value="{{ $tahun ?? request('tahun') }}">
-            </div>
-
-            <div class="col-md-3">
-              <button class="btn btn-primary w-100">Filter</button>
-            </div>
-          </form>
-
-          {{-- Tabel Capsule Filling --}}
-          <div class="table-responsive">
-            <table class="table table-striped align-middle">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Produk</th>
-                  <th>No Batch</th>
-                  <th>Kode Batch</th>
-                  <th>Bulan</th>
-                  <th>Tahun</th>
-                  <th>WO Date</th>
-                  <th>Expected Date</th>
-                  <th>Mixing Selesai</th>
-                  <th>Mulai Capsule</th>
-                  <th>Selesai Capsule</th>
-                  <th>Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-              @forelse($batches as $index => $batch)
-                @php
-                  $mulai  = $batch->tgl_mulai_capsule_filling
-                    ? $batch->tgl_mulai_capsule_filling->format('d-m-Y H:i')
-                    : '-';
-                  $selesai = $batch->tgl_capsule_filling
-                    ? $batch->tgl_capsule_filling->format('d-m-Y H:i')
-                    : '-';
-                  $mixDone = $batch->tgl_mixing
-                    ? $batch->tgl_mixing->format('d-m-Y H:i')
-                    : '-';
-                @endphp
-
-                <tr>
-                  <td>{{ $batches->firstItem() + $index }}</td>
-                  <td>{{ $batch->produksi->nama_produk ?? $batch->nama_produk }}</td>
-                  <td>{{ $batch->no_batch }}</td>
-                  <td>{{ $batch->kode_batch }}</td>
-                  <td>{{ $batch->bulan }}</td>
-                  <td>{{ $batch->tahun }}</td>
-                  <td>{{ $batch->wo_date ? $batch->wo_date->format('d-m-Y') : '-' }}</td>
-                  <td>{{ $batch->expected_date ? $batch->expected_date->format('d-m-Y') : '-' }}</td>
-                  <td>{{ $mixDone }}</td>
-                  <td>{{ $mulai }}</td>
-                  <td>{{ $selesai }}</td>
-
-                  <td class="text-center">
-
-                    {{-- form START --}}
-                    <form id="capsule-start-{{ $batch->id }}"
-                          action="{{ route('capsule-filling.start', $batch) }}"
-                          method="POST" class="d-inline">
-                      @csrf
-                    </form>
-
-                    {{-- form STOP --}}
-                    <form id="capsule-stop-{{ $batch->id }}"
-                          action="{{ route('capsule-filling.stop', $batch) }}"
-                          method="POST" class="d-inline">
-                      @csrf
-                    </form>
-
-                    @if(is_null($batch->tgl_mulai_capsule_filling))
-                      {{-- belum mulai --}}
-                      <button type="submit"
-                              form="capsule-start-{{ $batch->id }}"
-                              class="btn btn-sm btn-outline-primary">
-                        Start
-                      </button>
-                    @elseif(is_null($batch->tgl_capsule_filling))
-                      {{-- sudah mulai, belum selesai --}}
-                      <button type="submit"
-                              form="capsule-stop-{{ $batch->id }}"
-                              class="btn btn-sm btn-primary"
-                              onclick="return confirm('Stop / selesai Capsule Filling untuk batch ini?');">
-                        Stop
-                      </button>
-                    @endif
-
-                  </td>
-                </tr>
-              @empty
-                <tr>
-                  <td colspan="12" class="text-center">
-                    Tidak ada data batch yang menunggu Capsule Filling.
-                  </td>
-                </tr>
-              @endforelse
-              </tbody>
-            </table>
-          </div>
-
-          {{ $batches->links() }}
-        </div>
-
+    {{-- HEADER --}}
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-1">
+      <div>
+        <h4 class="card-title mb-0">Capsule Filling</h4>
+        <small class="text-muted">
+          Tekan <strong>START</strong> untuk mulai, <strong>STOP</strong> untuk selesai (wajib isi rekon).
+          <strong>PAUSE</strong> untuk kendala lapangan (tetap di halaman ini).
+          <strong>HOLD</strong> untuk penyimpangan (pindah ke modul Holding).
+        </small>
       </div>
+
+      <a href="{{ route('capsule-filling.history') }}" class="btn btn-sm btn-outline-secondary">
+        Riwayat Capsule Filling
+      </a>
+    </div>
+
+    <div class="card-body">
+
+      {{-- FILTER BAR --}}
+      @php
+        $bulanAktif   = $bulan ?? request('bulan', 'all');
+        $perPageAktif = request('per_page', $perPage ?? 25);
+
+        $namaBulan = [
+          1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
+          5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
+          9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember',
+        ];
+
+        $flashBatch =
+          session('success_batch')
+          ?? session('batch_code')
+          ?? session('kode_batch')
+          ?? session('batch')
+          ?? null;
+      @endphp
+
+      <form method="get" class="row g-1 g-md-2 align-items-center mb-2">
+        <div class="col-md-4">
+          <input type="text" name="q" class="form-control form-control-sm"
+                 placeholder="Cari produk / batch / kode..." value="{{ $search ?? request('q','') }}">
+        </div>
+
+        <div class="col-md-3">
+          <select name="bulan" class="form-select form-select-sm">
+            <option value="all">Semua Bulan</option>
+            @foreach($namaBulan as $num => $label)
+              <option value="{{ $num }}" {{ (int)$bulanAktif === $num ? 'selected' : '' }}>
+                {{ $label }}
+              </option>
+            @endforeach
+          </select>
+        </div>
+
+        <div class="col-md-2">
+          <input type="number" name="tahun" class="form-control form-control-sm"
+                 placeholder="Tahun" value="{{ $tahun ?? request('tahun') }}">
+        </div>
+
+        <div class="col-md-2">
+          <select name="per_page" class="form-select form-select-sm">
+            @foreach([25, 50, 100] as $opt)
+              <option value="{{ $opt }}" {{ (int)$perPageAktif === $opt ? 'selected' : '' }}>
+                {{ $opt }}
+              </option>
+            @endforeach
+          </select>
+        </div>
+
+        <div class="col-md-1">
+          <button class="btn btn-primary btn-sm w-100">Filter</button>
+        </div>
+      </form>
+
+      {{-- ALERT --}}
+      @if(session('success'))
+        <div class="alert alert-success py-1 mb-2">
+          {!! session('success') !!}
+          @if($flashBatch)
+            <strong>({{ $flashBatch }})</strong>
+          @endif
+        </div>
+      @endif
+
+      @if($errors->any())
+        <div class="alert alert-danger py-1 mb-2">{{ $errors->first() }}</div>
+      @endif
+
+      {{-- STYLES KHUSUS UNTUK PAUSE BOX --}}
+      <style>
+        /* wrapper dua kolom: tombol + pause box di samping, vertical-centered */
+        .pause-wrapper {
+          display: flex;
+          gap: .8rem;
+          align-items: center;       /* vertical centering */
+          justify-content: center;
+          flex-wrap: nowrap;
+          width: 100%;
+        }
+
+        /* area tombol RESUME (fix width supaya tombol tidak melebar) */
+        .resume-area {
+          flex: 0 0 130px; /* lebar tetap untuk area tombol */
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        /* agar tombol tidak tampak mepet di kanan tabel */
+        .resume-area .btn { min-width: 90px; }
+
+        /* Box kecil untuk alasan pause (mengisi sisa lebar) */
+        .pause-box {
+          flex: 1 1 auto;
+          min-width: 220px;
+          max-width: 540px;
+          background: #fff;
+          border: 1px solid #e6e9ee;
+          border-radius: 8px;
+          padding: .6rem .75rem;
+          box-shadow: 0 6px 12px rgba(15,23,42,.04);
+          font-size: .88rem;
+          text-align: left;
+        }
+        .pause-box .title {
+          font-weight: 700;
+          font-size: .78rem;
+          margin-bottom: .25rem;
+          color: #374151;
+        }
+        .pause-box .reason {
+          max-height: 4.2rem; /* batasi tinggi, muncul scroll jika panjang */
+          overflow: auto;
+          white-space: pre-wrap;
+          word-break: break-word;
+          color: #111827;
+          line-height: 1.2;
+        }
+        .pause-box .meta {
+          margin-top: .45rem;
+          color: #6b7280;
+          font-size: .78rem;
+        }
+
+        /* kalau layar sempit, kolom aksi ditumpuk agar tidak memecah layout */
+        @media (max-width: 992px) {
+          .pause-wrapper { flex-direction: column; gap: .5rem; align-items: stretch; }
+          .resume-area { flex: 0 0 auto; width: 100%; justify-content: center; }
+          .pause-box { min-width: auto; max-width: 100%; }
+        }
+
+        /* kecilkan padding tabel agar muat */
+        .table td, .table th { vertical-align: middle; }
+      </style>
+
+      {{-- TABLE --}}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+          <thead class="table-light">
+            <tr class="text-nowrap">
+              <th>#</th>
+              <th>Nama Produk</th>
+              <th>No WO</th>
+              <th>Mixing Selesai</th>
+              <th class="text-center">Target Rekon</th>
+              <th>Capsule Awal</th>
+              <th>Capsule Akhir</th>
+              <th>Status</th>
+              <th class="text-center" style="width:260px;">Aksi & Alasan PAUSE</th>
+            </tr>
+          </thead>
+
+          <tbody>
+          @forelse($batches as $i => $batch)
+
+          @php
+            $produkNama = $batch->produksi->nama_produk ?? $batch->nama_produk ?? '-';
+            $kodeBatch  = $batch->kode_batch ?? $batch->no_batch ?? '-';
+
+            $p = $batch->produksi;
+            $targetCap = (int) ($p->target_rekon_capsule_filling ?? $p->target_rekon_capsule ?? 0);
+            $targetCapText = $targetCap > 0 ? number_format($targetCap, 0, ',', '.') : '-';
+
+            $pauseStage  = $batch->paused_stage ?? null;
+            $isPauseHere = (bool)($batch->is_paused ?? false) && $pauseStage === 'CAPSULE_FILLING';
+          @endphp
+
+          <tr>
+            <td>{{ $batches->firstItem() + $i }}</td>
+            <td class="fw-semibold">{{ $produkNama }}</td>
+            <td>{{ $kodeBatch }}</td>
+            <td>{{ $batch->tgl_mixing?->format('d-m-Y H:i') ?? '-' }}</td>
+
+            <td class="text-center fw-semibold">{{ $targetCapText }}</td>
+
+            <td>{{ $batch->tgl_mulai_capsule_filling?->format('d-m-Y H:i') ?? '-' }}</td>
+            <td>{{ $batch->tgl_capsule_filling?->format('d-m-Y H:i') ?? '-' }}</td>
+
+            <td>
+              @if($batch->is_holding)
+                <span class="badge bg-dark">HOLD</span>
+              @elseif($isPauseHere)
+                <span class="badge bg-warning text-dark">PAUSED</span>
+              @elseif($batch->tgl_capsule_filling)
+                <span class="badge bg-success">Selesai</span>
+              @elseif($batch->tgl_mulai_capsule_filling)
+                <span class="badge bg-info">Berjalan</span>
+              @else
+                <span class="badge bg-secondary">Belum</span>
+              @endif
+            </td>
+
+            {{-- ACTION --}}
+            <td class="text-center align-top">
+
+              {{-- BELUM START --}}
+              @if(!$batch->tgl_mulai_capsule_filling)
+
+                <form action="{{ route('capsule-filling.start', $batch) }}" method="POST">
+                  @csrf
+                  <button class="btn btn-success btn-sm px-3">START</button>
+                </form>
+
+              {{-- SUDAH START --}}
+              @elseif(!$batch->tgl_capsule_filling)
+
+                @if($batch->is_holding)
+
+                  <a href="{{ route('holding.index') }}" class="btn btn-dark btn-sm">HOLDING</a>
+
+                @elseif($isPauseHere)
+
+                  {{-- ===== DISPLAY UNTUK STATUS PAUSED: Resume di kiri (center vertical) + alasan di kanan ===== --}}
+                  <div class="pause-wrapper">
+
+                    {{-- RESUME area (tetap vertical centered) --}}
+                    <div class="resume-area">
+                      <form action="{{ route('capsule-filling.resume', $batch) }}" method="POST" class="d-inline">
+                        @csrf
+                        <button class="btn btn-warning btn-sm">RESUME</button>
+                      </form>
+                    </div>
+
+                    {{-- Pause box (card kecil, rapi) di kanan --}}
+                    <div class="pause-box">
+                      <div class="title">Alasan PAUSE</div>
+                      <div class="reason">{!! nl2br(e($batch->paused_reason ?? '-')) !!}</div>
+                      <div class="meta">
+                        oleh <strong>{{ $batch->paused_by_name ?? ($batch->paused_by ?? '-') }}</strong>
+                        • {{ optional($batch->paused_at)->format('d-m-Y H:i') ?? '-' }}
+                      </div>
+                    </div>
+
+                  </div>
+
+                @else
+
+                  <div class="d-flex justify-content-center gap-1 flex-wrap">
+
+                    <button type="button" class="btn btn-danger btn-sm"
+                            data-bs-toggle="modal"
+                            data-bs-target="#stopModal{{ $batch->id }}">
+                      STOP
+                    </button>
+
+                    <button type="button" class="btn btn-outline-warning btn-sm"
+                            data-bs-toggle="modal"
+                            data-bs-target="#pauseModal{{ $batch->id }}">
+                      PAUSE
+                    </button>
+
+                    <button type="button" class="btn btn-outline-dark btn-sm"
+                            data-bs-toggle="modal"
+                            data-bs-target="#holdModal{{ $batch->id }}">
+                      HOLD
+                    </button>
+
+                  </div>
+
+                @endif
+
+              @else
+                <span class="badge bg-success">Selesai</span>
+              @endif
+
+            </td>
+          </tr>
+
+          @empty
+          <tr>
+            <td colspan="9" class="text-center text-muted">
+              Tidak ada batch untuk Capsule Filling.
+            </td>
+          </tr>
+          @endforelse
+          </tbody>
+        </table>
+      </div>
+
+      {{-- PAGINATION --}}
+      <div class="d-flex justify-content-center mt-2">
+        {{ $batches->withQueryString()->links('pagination::bootstrap-4') }}
+      </div>
+
     </div>
   </div>
 </section>
+
+{{-- ================= MODALS (TIDAK MERUBAH LOGIC) ================= --}}
+@foreach($batches as $batch)
+@php
+  $produkNama = $batch->produksi->nama_produk ?? '-';
+  $kodeBatch  = $batch->kode_batch ?? '-';
+  $p = $batch->produksi;
+  $targetCap = (int) ($p->target_rekon_capsule_filling ?? $p->target_rekon_capsule ?? 0);
+  $targetCapText = $targetCap > 0 ? number_format($targetCap, 0, ',', '.') : '-';
+@endphp
+
+{{-- STOP --}}
+<div class="modal fade" id="stopModal{{ $batch->id }}">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content" method="POST" action="{{ route('capsule-filling.stop', $batch) }}">
+      @csrf
+      <div class="modal-header">
+        <h5 class="modal-title">STOP Capsule Filling + Input Rekon</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="fw-semibold">{{ $produkNama }}</div>
+        <div class="text-muted small mb-2">Batch: {{ $kodeBatch }}</div>
+        <div class="alert alert-light border py-1 small">
+          Target Rekon: <strong>{{ $targetCapText }}</strong>
+        </div>
+        <label>Rekon</label>
+        <input type="number" name="rekon_qty" class="form-control" min="0" required>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+        <button class="btn btn-danger">Simpan & STOP</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{{-- PAUSE --}}
+<div class="modal fade" id="pauseModal{{ $batch->id }}">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content" method="POST" action="{{ route('capsule-filling.pause', $batch) }}">
+      @csrf
+      <div class="modal-header">
+        <h5 class="modal-title">Pause Capsule Filling</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label">Alasan Pause</label>
+        <textarea name="paused_reason" class="form-control" rows="3" required></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+        <button class="btn btn-warning">Simpan</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{{-- HOLD --}}
+<div class="modal fade" id="holdModal{{ $batch->id }}">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content" method="POST" action="{{ route('capsule-filling.hold', $batch) }}">
+      @csrf
+      <div class="modal-header">
+        <h5 class="modal-title">Hold Capsule Filling</h5>
+        <button class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <label class="form-label">Alasan Hold</label>
+        <textarea name="holding_reason" class="form-control" rows="3" required></textarea>
+        <label class="form-label mt-2">Catatan (opsional)</label>
+        <textarea name="holding_note" class="form-control" rows="2"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Batal</button>
+        <button class="btn btn-dark">Hold</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+@endforeach
+
 @endsection

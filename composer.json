@@ -6,14 +6,18 @@
     "license": "MIT",
     "require": {
         "php": "^8.0",
+        "barryvdh/laravel-dompdf": "^2.2",
         "doctrine/dbal": "2.13",
+        "endroid/qr-code": "^5.0",
         "fruitcake/laravel-cors": "^2.0",
         "guzzlehttp/guzzle": "^7.0.1",
         "laravel/framework": "^8.75",
         "laravel/sanctum": "^2.11",
         "laravel/tinker": "^2.5",
         "nesbot/carbon": "2.70",
-        "phpoffice/phpspreadsheet": "^5.2"
+        "phpoffice/phpspreadsheet": "^5.3",
+        "picqer/php-barcode-generator": "^3.2",
+        "simplesoftwareio/simple-qrcode": "^4.2"
     },
     "require-dev": {
         "facade/ignition": "^2.5",

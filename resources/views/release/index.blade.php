@@ -25,11 +25,6 @@
                class="btn btn-sm btn-success">
               Export Logsheet (CSV)
             </a>
-            <a href="{{ route('release.print', request()->query()) }}"
-               target="_blank"
-               class="btn btn-sm btn-primary">
-              Cetak Form Penyerahan
-            </a>
           </div>
         </div>
 

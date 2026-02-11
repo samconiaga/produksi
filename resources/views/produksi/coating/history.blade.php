@@ -1,119 +1,153 @@
 @extends('layouts.app')
 
 @section('content')
-<section class="app-user-list">
-  <div class="row" id="basic-table">
-    <div class="col-12">
-      <div class="card">
+<section class="app-user">
+  <div class="card">
 
-        {{-- HEADER --}}
-        <div class="card-header d-flex justify-content-between align-items-center">
-          <div>
-            <h4 class="card-title mb-0">Riwayat Coating</h4>
-            <p class="mb-0 text-muted">
-              Menampilkan batch yang sudah memiliki tanggal Coating (selesai proses Coating).
-            </p>
-          </div>
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-1">
+      <div>
+        <h4 class="card-title mb-0">Riwayat Coating</h4>
+        <small class="text-muted">
+          Daftar batch yang sudah selesai proses Coating (termasuk Rekon saat STOP).
+        </small>
+      </div>
 
-          <a href="{{ route('coating.index') }}" class="btn btn-sm btn-outline-secondary">
-            &laquo; Kembali ke Coating
-          </a>
+      <a href="{{ route('coating.index') }}" class="btn btn-sm btn-outline-primary">
+        Kembali ke Coating Aktif
+      </a>
+    </div>
+
+    <div class="card-body">
+
+      @php
+        $bulanAktif   = $bulan ?? 'all';
+        $perPageAktif = request('per_page', $perPage ?? 25);
+        $namaBulan = [
+          1 => 'Januari', 2 => 'Februari', 3 => 'Maret', 4 => 'April',
+          5 => 'Mei', 6 => 'Juni', 7 => 'Juli', 8 => 'Agustus',
+          9 => 'September', 10 => 'Oktober', 11 => 'November', 12 => 'Desember',
+        ];
+      @endphp
+
+      {{-- FILTER --}}
+      <form method="get" class="row g-1 g-md-2 align-items-center mb-2">
+        <div class="col-12 col-md-4 col-lg-4">
+          <input type="text"
+                 name="q"
+                 class="form-control form-control-sm"
+                 placeholder="Cari produk / batch / kode..."
+                 value="{{ $search }}">
         </div>
 
-        <div class="card-body">
-
-          {{-- FILTER --}}
-          <form method="GET" action="{{ route('coating.history') }}" class="row g-2 mb-3">
-            <div class="col-md-4">
-              <input type="text"
-                     name="q"
-                     class="form-control"
-                     placeholder="Cari produk / no batch / kode batch"
-                     value="{{ $search ?? request('q') }}">
-            </div>
-
-            <div class="col-md-3">
-              @php
-                $currentBulan = $bulan ?? request('bulan', 'all');
-              @endphp
-              <select name="bulan" class="form-control">
-                <option value="all" {{ $currentBulan === 'all' || $currentBulan === null ? 'selected' : '' }}>
-                  Semua Bulan
-                </option>
-                @for ($m = 1; $m <= 12; $m++)
-                  @php $val = (string) $m; @endphp
-                  <option value="{{ $val }}" {{ (string)$currentBulan === $val ? 'selected' : '' }}>
-                    {{ str_pad($m, 2, '0', STR_PAD_LEFT) }}
-                  </option>
-                @endfor
-              </select>
-            </div>
-
-            <div class="col-md-2">
-              <input type="number"
-                     name="tahun"
-                     class="form-control"
-                     placeholder="Tahun"
-                     value="{{ $tahun ?? request('tahun') }}">
-            </div>
-
-            <div class="col-md-3">
-              <button class="btn btn-primary w-100">Filter</button>
-            </div>
-          </form>
-
-          {{-- TABEL RIWAYAT COATING --}}
-          <div class="table-responsive">
-            <table class="table table-striped align-middle">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>Produk</th>
-                  <th>No Batch</th>
-                  <th>Kode Batch</th>
-                  <th>Bulan</th>
-                  <th>Tahun</th>
-                  <th>WO Date</th>
-                  <th>Expected Date</th>
-                  <th>Tgl Tableting</th>
-                  <th>Tgl Mulai Coating</th>
-                  <th>Tgl Coating (Selesai)</th>
-                </tr>
-              </thead>
-
-              <tbody>
-              @forelse($batches as $index => $batch)
-                <tr>
-                  <td>{{ $batches->firstItem() + $index }}</td>
-
-                  <td>{{ $batch->produksi->nama_produk ?? $batch->nama_produk }}</td>
-                  <td>{{ $batch->no_batch }}</td>
-                  <td>{{ $batch->kode_batch }}</td>
-                  <td>{{ $batch->bulan }}</td>
-                  <td>{{ $batch->tahun }}</td>
-
-                  <td>{{ $batch->wo_date ? $batch->wo_date->format('d-m-Y') : '-' }}</td>
-                  <td>{{ $batch->expected_date ? $batch->expected_date->format('d-m-Y') : '-' }}</td>
-                  <td>{{ $batch->tgl_tableting ? $batch->tgl_tableting->format('d-m-Y H:i') : '-' }}</td>
-                  <td>{{ $batch->tgl_mulai_coating ? $batch->tgl_mulai_coating->format('d-m-Y H:i') : '-' }}</td>
-                  <td>{{ $batch->tgl_coating ? $batch->tgl_coating->format('d-m-Y H:i') : '-' }}</td>
-                </tr>
-              @empty
-                <tr>
-                  <td colspan="11" class="text-center">
-                    Belum ada riwayat Coating.
-                  </td>
-                </tr>
-              @endforelse
-              </tbody>
-            </table>
-          </div>
-
-          {{ $batches->links() }}
-
+        <div class="col-6 col-md-3 col-lg-3">
+          <select name="bulan" class="form-select form-select-sm">
+            <option value="all" {{ $bulanAktif === 'all' || $bulanAktif === '' ? 'selected' : '' }}>
+              Semua Bulan
+            </option>
+            @foreach($namaBulan as $num => $label)
+              <option value="{{ $num }}" {{ (int)$bulanAktif === $num ? 'selected' : '' }}>
+                {{ $label }}
+              </option>
+            @endforeach
+          </select>
         </div>
+
+        <div class="col-6 col-md-2 col-lg-2">
+          <input type="number"
+                 name="tahun"
+                 class="form-control form-control-sm"
+                 placeholder="Tahun"
+                 value="{{ $tahun }}">
+        </div>
+
+        <div class="col-6 col-md-2 col-lg-2">
+          <select name="per_page" class="form-select form-select-sm">
+            @foreach([25, 50, 100] as $opt)
+              <option value="{{ $opt }}" {{ (int)$perPageAktif === $opt ? 'selected' : '' }}>
+                {{ $opt }} / halaman
+              </option>
+            @endforeach
+          </select>
+        </div>
+
+        <div class="col-6 col-md-1 col-lg-1 text-end">
+          <button class="btn btn-sm btn-primary w-100">Filter</button>
+        </div>
+      </form>
+
+      @if(session('success'))
+        <div class="alert alert-success py-1 mb-2">{!! session('success') !!}</div>
+      @endif
+      @if($errors->any())
+        <div class="alert alert-danger py-1 mb-2">{{ $errors->first() }}</div>
+      @endif
+
+      {{-- TABLE --}}
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle">
+          <thead class="table-light">
+            <tr class="text-nowrap">
+              <th style="width:40px;">#</th>
+              <th>Nama Produk</th>
+              <th>No WO</th>
+              <th>Tableting Selesai</th>
+              <th>Coating Mulai</th>
+              <th>Coating Selesai</th>
+              <th class="text-end" style="width:170px;">Rekon</th>
+              <th style="width:160px;">Diinput</th>
+            </tr>
+          </thead>
+
+          <tbody>
+          @forelse($batches as $i => $batch)
+            @php
+              $rekonQty = $batch->coating_rekon_qty;
+              $rekonAt  = $batch->coating_rekon_at;
+
+              $rekonText = '-';
+              if ($rekonQty !== null && $rekonQty !== '') {
+                $rekonText = number_format((int)$rekonQty, 0, ',', '.');
+              }
+            @endphp
+
+            <tr>
+              <td>{{ $batches->firstItem() + $i }}</td>
+              <td>{{ $batch->produksi->nama_produk ?? $batch->nama_produk }}</td>
+              <td>{{ $batch->kode_batch ?? $batch->no_batch }}</td>
+
+              <td>{{ $batch->tgl_tableting ? $batch->tgl_tableting->format('d-m-Y H:i') : '-' }}</td>
+              <td>{{ $batch->tgl_mulai_coating ? $batch->tgl_mulai_coating->format('d-m-Y H:i') : '-' }}</td>
+              <td>{{ $batch->tgl_coating ? $batch->tgl_coating->format('d-m-Y H:i') : '-' }}</td>
+
+              <td class="text-end">
+                <span class="fw-semibold">{{ $rekonText }}</span>
+              </td>
+
+              <td>
+                @if($rekonAt)
+                  {{ \Carbon\Carbon::parse($rekonAt)->format('d-m-Y H:i') }}
+                @else
+                  -
+                @endif
+              </td>
+            </tr>
+          @empty
+            <tr>
+              <td colspan="8" class="text-center text-muted">Belum ada riwayat Coating.</td>
+            </tr>
+          @endforelse
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <div class="card-body">
+      <div class="d-flex justify-content-center">
+        {{ $batches->withQueryString()->links('pagination::bootstrap-4') }}
       </div>
     </div>
+
   </div>
 </section>
 @endsection

@@ -8,65 +8,47 @@ use Illuminate\Http\Request;
 class WeighingController extends Controller
 {
     /**
-     * List jadwal untuk proses Weighing.
+     * Halaman daftar Weighing (WO).
+     * Hanya lihat data, tanpa edit.
      */
     public function index(Request $request)
     {
-        $search = trim($request->get('q', ''));
-        $bulan  = $request->get('bulan');  // boleh null / "all"
-        $tahun  = $request->get('tahun');  // boleh null
+        $q       = $request->get('q', '');
+        $bulan   = $request->get('bulan');
+        $tahun   = $request->get('tahun');
+        $perPage = (int) $request->get('per_page', 25);
 
-        // Ambil semua batch (baik yang sudah maupun yang belum weighing)
-        $query = ProduksiBatch::with('produksi');
-
-        // Filter search (produk / no batch / kode batch)
-        if ($search !== '') {
-            $query->where(function ($q2) use ($search) {
-                $q2->where('nama_produk', 'like', "%{$search}%")
-                   ->orWhere('no_batch', 'like', "%{$search}%")
-                   ->orWhere('kode_batch', 'like', "%{$search}%");
-            });
+        if ($perPage <= 0) {
+            $perPage = 25;
         }
 
-        // Filter bulan kalau dipilih selain "all"
-        if ($bulan !== null && $bulan !== '' && $bulan !== 'all') {
-            $query->where('bulan', (int) $bulan);
-        }
+        $rows = ProduksiBatch::with('produksi')
+            ->when($q !== '', function ($qb) use ($q) {
+                $qb->where(function ($sub) use ($q) {
+                    $sub->where('nama_produk', 'like', "%{$q}%")
+                        ->orWhere('no_batch', 'like', "%{$q}%")
+                        ->orWhere('kode_batch', 'like', "%{$q}%");
+                });
+            })
+            ->when($bulan !== null && $bulan !== '' && $bulan !== 'all', function ($qb) use ($bulan) {
+                $qb->where('bulan', (int) $bulan);
+            })
+            ->when($tahun !== null && $tahun !== '', function ($qb) use ($tahun) {
+                $qb->where('tahun', (int) $tahun);
+            })
+            ->orderBy('tahun')
+            ->orderBy('bulan')
+            ->orderBy('wo_date')
+            ->orderBy('id')
+            ->paginate($perPage)
+            ->withQueryString();
 
-        // Filter tahun kalau diisi
-        if ($tahun !== null && $tahun !== '') {
-            $query->where('tahun', (int) $tahun);
-        }
-
-        $batches = $query->orderBy('tahun')
-                         ->orderBy('bulan')
-                         ->orderBy('wo_date')
-                         ->paginate(20)
-                         ->withQueryString();
-
-        return view('produksi.weighing.index', [
-            'batches' => $batches,
-            'search'  => $search,
-            'bulan'   => $bulan,
-            'tahun'   => $tahun,
-        ]);
-    }
-
-    /**
-     * Simpan tanggal selesai weighing untuk satu batch.
-     */
-    public function store(Request $request, ProduksiBatch $batch)
-    {
-        $data = $request->validate([
-            'tgl_weighing' => ['required', 'date'],
-        ]);
-
-        $batch->tgl_weighing = $data['tgl_weighing'];
-        $batch->save();
-
-        // Kalau nanti ada fungsi untuk update status, bisa dipakai di sini.
-        // $batch->refreshStatus();
-
-        return back()->with('success', 'Tanggal selesai weighing berhasil disimpan.');
+        return view('weighing.index', compact(
+            'rows',
+            'q',
+            'bulan',
+            'tahun',
+            'perPage'
+        ));
     }
 }

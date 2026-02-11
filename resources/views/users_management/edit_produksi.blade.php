@@ -5,62 +5,79 @@
   <div class="row">
     <div class="col-12">
       <div class="card">
+
         <div class="card-header">
           <h4 class="card-title">Edit Akun Produksi</h4>
         </div>
+
         <div class="card-body">
-          <form class="form" action="{{ url('/show-produksi/'.$produksi->id) }}" method="POST">
+          {{-- 🔥 FIX ROUTE DI SINI --}}
+          <form action="{{ url('/show-produksi/'.$produksi->id) }}" method="POST">
             @csrf
-            @method('put')
+            @method('PUT')
+
             <div class="row">
-              <div class="col-md-6 col-12">
-                <div class="mb-1">
-                  <label class="form-label">Nama</label>
-                  <input
-                    type="text"
-                    class="form-control"
-                    name="name"
-                    value="{{ $produksi->name }}"
-                    placeholder="Masukkan Nama Baru"
-                  >
-                </div>
-                @error('name') <div class="text-danger mt-1">{{ $message }}</div> @enderror
+
+              <div class="col-md-6 col-12 mb-1">
+                <label>Nama</label>
+                <input
+                  type="text"
+                  name="name"
+                  class="form-control"
+                  value="{{ old('name', $produksi->name) }}"
+                  required
+                >
               </div>
 
-              <div class="col-md-6 col-12">
-                <div class="mb-1">
-                  <label class="form-label">Email</label>
-                  <input
-                    type="email"
-                    class="form-control"
-                    name="email"
-                    value="{{ $produksi->email }}"
-                    placeholder="Masukkan Email Baru"
-                  >
-                </div>
-                @error('email') <div class="text-danger mt-1">{{ $message }}</div> @enderror
+              <div class="col-md-6 col-12 mb-1">
+                <label>Email</label>
+                <input
+                  type="email"
+                  name="email"
+                  class="form-control"
+                  value="{{ old('email', $produksi->email) }}"
+                  required
+                >
               </div>
 
-              <div class="col-md-6 col-12">
-                <div class="mb-1">
-                  <label class="form-label">Password (opsional)</label>
-                  <input
-                    type="password"
-                    class="form-control"
-                    name="password"
-                    placeholder="Masukkan Password Baru"
-                  >
-                </div>
-                @error('password') <div class="text-danger mt-1">{{ $message }}</div> @enderror
+              <div class="col-md-6 col-12 mb-1">
+                <label>Password (Opsional)</label>
+                <input
+                  type="password"
+                  name="password"
+                  class="form-control"
+                  placeholder="Kosongkan jika tidak diubah"
+                >
               </div>
 
-              <div class="col-12 text-center">
-                <button type="submit" class="btn btn-primary me-1">Submit</button>
-                <button type="reset" class="btn btn-outline-secondary">Reset</button>
+              <div class="col-md-6 col-12 mb-1">
+                <label>Level Produksi</label>
+                <select name="produksi_role" class="form-control" required>
+                  <option value="ADMIN" {{ $produksi->produksi_role=='ADMIN' ? 'selected' : '' }}>
+                    Admin
+                  </option>
+                  <option value="SPV" {{ $produksi->produksi_role=='SPV' ? 'selected' : '' }}>
+                    SPV
+                  </option>
+                  <option value="OPERATOR" {{ $produksi->produksi_role=='OPERATOR' ? 'selected' : '' }}>
+                    Operator
+                  </option>
+                </select>
               </div>
+
+              <div class="col-12 text-center mt-2">
+                <button type="submit" class="btn btn-primary me-1">
+                  Update
+                </button>
+                <a href="{{ url('/show-produksi') }}" class="btn btn-outline-secondary">
+                  Batal
+                </a>
+              </div>
+
             </div>
           </form>
         </div>
+
       </div>
     </div>
   </div>

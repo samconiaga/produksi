@@ -7,18 +7,19 @@ use Illuminate\Http\Request;
 
 class Admin
 {
-    /**
-     * Handle an incoming request.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  \Closure(\Illuminate\Http\Request): (\Illuminate\Http\Response|\Illuminate\Http\RedirectResponse)  $next
-     * @return \Illuminate\Http\Response|\Illuminate\Http\RedirectResponse
-     */
     public function handle(Request $request, Closure $next)
     {
-        if ($request->user()->role != 'Admin') {
-            return redirect('/');
+        if (!auth()->check()) {
+            abort(401);
         }
+
+        $role = strtolower(trim((string) (auth()->user()->role ?? '')));
+        $admins = ['admin', 'administrator', 'superadmin'];
+
+        if (!in_array($role, $admins, true)) {
+            abort(403, 'Admin only.');
+        }
+
         return $next($request);
     }
 }

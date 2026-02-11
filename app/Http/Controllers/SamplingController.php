@@ -38,8 +38,8 @@ class SamplingController extends Controller
             })
 
             // Filter bulan & tahun
-            ->when($bulan, fn($qb) => $qb->where('bulan', (int) $bulan))
-            ->when($tahun, fn($qb) => $qb->where('tahun', (int) $tahun))
+            ->when($bulan !== null && $bulan !== '', fn($qb) => $qb->where('bulan', (int) $bulan))
+            ->when($tahun !== null && $tahun !== '', fn($qb) => $qb->where('tahun', (int) $tahun))
 
             ->orderBy('tahun')
             ->orderBy('bulan')
@@ -74,8 +74,8 @@ class SamplingController extends Controller
             })
 
             // Filter bulan & tahun
-            ->when($bulan, fn($qb) => $qb->where('bulan', (int) $bulan))
-            ->when($tahun, fn($qb) => $qb->where('tahun', (int) $tahun))
+            ->when($bulan !== null && $bulan !== '', fn($qb) => $qb->where('bulan', (int) $bulan))
+            ->when($tahun !== null && $tahun !== '', fn($qb) => $qb->where('tahun', (int) $tahun))
 
             ->orderBy('tahun')
             ->orderBy('bulan')
@@ -89,7 +89,7 @@ class SamplingController extends Controller
     /**
      * ACC Sampling → status_sampling = 'accepted'
      * dan tgl_sampling = hari ini (kalau belum diisi).
-     * Tetap muncul di INDEX (karena filter index juga ambil 'accepted').
+     * Tetap muncul di INDEX.
      */
     public function acc(ProduksiBatch $batch)
     {
@@ -104,12 +104,11 @@ class SamplingController extends Controller
     /**
      * KONFIRMASI Sampling → status_sampling = 'confirmed'
      * - Pindah ke Riwayat
-     * - status_review = 'pending' (masuk ke modul Review & Release)
+     * - status_review = 'pending'
      * - catatan_review ditambah log singkat.
      */
     public function confirm(ProduksiBatch $batch)
     {
-        // pastikan sudah accepted dulu (opsional safety)
         if ($batch->status_sampling !== 'accepted') {
             return back()->with('ok', 'Sampling belum di-ACCEPT, tidak dapat dikonfirmasi.');
         }

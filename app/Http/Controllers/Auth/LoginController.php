@@ -11,12 +11,12 @@ use Illuminate\Validation\ValidationException;
 class LoginController extends Controller
 {
     /**
-     * Tampilkan halaman login.
-     * Jika sudah login, langsung arahkan ke halaman sesuai role.
+     * Tampilkan halaman login (guest).
      */
     public function login()
     {
         if (Auth::check()) {
+            /** @var User $user */
             $user = Auth::user();
             return redirect()->route($this->redirectRouteNameByRole($user));
         }
@@ -25,45 +25,47 @@ class LoginController extends Controller
     }
 
     /**
-     * Proses login.
+     * Proses login (POST).
      */
     public function store(Request $request)
     {
+        // validasi input
         $credentials = $request->validate([
             'email'    => ['required', 'email'],
             'password' => ['required'],
-            'remember' => ['nullable', 'boolean'],
+            'remember' => ['nullable'],
         ], [], [
             'email'    => 'Email',
             'password' => 'Password',
         ]);
 
-        $remember = (bool) ($credentials['remember'] ?? false);
+        // ambil boolean dari checkbox (aman untuk "on", "1", true, etc.)
+        $remember = $request->boolean('remember');
 
-        // Hanya ambil email & password untuk attempt
-        $attemptCreds = [
+        // coba autentikasi
+        if (Auth::attempt([
             'email'    => $credentials['email'],
             'password' => $credentials['password'],
-        ];
+        ], $remember)) {
 
-        if (Auth::attempt($attemptCreds, $remember)) {
+            // regenerasi session setelah login (penting untuk mencegah fixation)
             $request->session()->regenerate();
 
             /** @var User $user */
             $user = Auth::user();
 
+            // redirect ke intended atau route berdasarkan role
             return redirect()->intended(route($this->redirectRouteNameByRole($user)));
         }
 
-        // Kredensial salah
+        // kalau gagal, kembalikan error validasi
         throw ValidationException::withMessages([
             'email' => 'Email atau password yang Anda masukkan salah.',
         ]);
     }
 
     /**
-     * (Opsional) Logout user.
-     * Jika kamu sudah punya logout di controller lain, method ini tidak perlu diroute.
+     * Logout
      */
     public function destroy(Request $request)
     {
@@ -75,16 +77,18 @@ class LoginController extends Controller
     }
 
     /**
-     * Tentukan route name tujuan setelah login, berdasarkan role user.
+     * Map role -> route name (pastikan case sesuai isi kolom role)
      */
     protected function redirectRouteNameByRole(User $user): string
     {
         return match ($user->role) {
-            'Admin'      => 'dashboard',             // admin dashboard
-            'PPIC'       => 'halal.index',           // modul Halal PPIC
-            'Purchasing' => 'purch-vendor.index',    // modul Purchasing Vendor
-            'R&D'        => 'trial-rnd.index',       // modul Trial R&D
-            default      => 'home',                  // fallback
+            'Admin'      => 'dashboard',
+            'Produksi'   => 'dashboard',
+            'QC'         => 'dashboard',
+            'QA'         => 'dashboard',
+            'PPIC'       => 'dashboard',
+            'Gudang'     => 'dashboard',
+            default      => 'dashboard',
         };
     }
 }

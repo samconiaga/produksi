@@ -2,15 +2,25 @@
 
 @section('content')
 
-<style>
-  .col-catatan-review {
-      max-width: 350px;
-      white-space: normal;
-  }
-  @media (min-width: 1400px) {
-      .col-catatan-review {
-          max-width: 460px;
+@php
+  use Carbon\Carbon;
+
+  // Format aman: kalau null -> '-', kalau datetime/date string -> tampil YYYY-MM-DD aja
+  $fmtDate = function ($value) {
+      if (empty($value)) return '-';
+      try {
+          return Carbon::parse($value)->format('Y-m-d');
+      } catch (\Throwable $e) {
+          // fallback: kalau parsing gagal, tampilkan mentah tapi tanpa jam kalau ada
+          return str_replace(' 00:00:00', '', (string) $value);
       }
+  };
+@endphp
+
+<style>
+  .col-catatan-review { max-width: 350px; white-space: normal; }
+  @media (min-width: 1400px) {
+    .col-catatan-review { max-width: 460px; }
   }
 </style>
 
@@ -22,15 +32,14 @@
         {{-- Header --}}
         <div class="card-header d-flex justify-content-between align-items-center">
           <div>
-            <h4 class="card-title mb-0">Job Sheet QC</h4>
+            <h4 class="card-title mb-0">Job Sheet</h4>
             <p class="mb-0 text-muted">
               Menampilkan batch yang sudah dikonfirmasi Qty Batch dan sedang disusun Job Sheet
               atau dikembalikan dari Review (Hold).
             </p>
           </div>
 
-          <a href="{{ route('qc-jobsheet.history') }}"
-             class="btn btn-sm btn-outline-secondary">
+          <a href="{{ route('qc-jobsheet.history') }}" class="btn btn-sm btn-outline-secondary">
             Riwayat Job Sheet
           </a>
         </div>
@@ -129,9 +138,11 @@
                 <td>{{ $row->nama_produk }}</td>
                 <td>{{ $row->bulan }}</td>
                 <td>{{ $row->tahun }}</td>
-                <td>{{ $row->wo_date ?: '-' }}</td>
-                <td>{{ $row->tgl_konfirmasi_produksi ?: '-' }}</td>
-                <td>{{ $row->tgl_terima_jobsheet ?: '-' }}</td>
+
+                {{-- FIX: hilangkan jam 00:00:00 --}}
+                <td>{{ $fmtDate($row->wo_date) }}</td>
+                <td>{{ $fmtDate($row->tgl_konfirmasi_produksi) }}</td>
+                <td>{{ $fmtDate($row->tgl_terima_jobsheet) }}</td>
 
                 {{-- STATUS REVIEW --}}
                 <td>
@@ -157,13 +168,11 @@
                 <td class="text-center">
                   <div class="d-grid gap-50">
 
-                    {{-- Isi / Edit Job Sheet --}}
                     <a href="{{ route('qc-jobsheet.edit',$row->id) }}"
                        class="btn btn-sm btn-outline-secondary w-100">
                       Isi / Ubah Job Sheet
                     </a>
 
-                    {{-- Konfirmasi & kirim (atau kirim ulang) ke Review --}}
                     <form action="{{ route('qc-jobsheet.confirm',$row->id) }}"
                           method="POST"
                           onsubmit="return confirm('Konfirmasi Job Sheet dan kirim ke Review?');">

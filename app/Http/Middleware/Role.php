@@ -3,33 +3,26 @@
 namespace App\Http\Middleware;
 
 use Closure;
-use Illuminate\Support\Facades\Auth;
+use Illuminate\Http\Request;
 
 class Role
 {
-    /**
-     * Pakai di route: ->middleware('role:Admin,PPIC')
-     * - Admin/Administrator/Superadmin selalu lolos.
-     * - Selain itu dicek apakah role user ada di daftar parameter.
-     */
-    public function handle($request, Closure $next, ...$roles)
+    public function handle(Request $request, Closure $next, ...$roles)
     {
-        $user = Auth::user();
+        $user = $request->user();
+
         if (!$user) {
-            abort(401);
+            abort(403, 'Unauthorized.');
         }
 
-        $userRole = strtolower((string) $user->role);
-        $allowed  = array_map(fn($r) => strtolower(trim($r)), $roles);
+        $userRole = strtolower(trim((string) ($user->role ?? '')));
 
-        // Admin aliases selalu boleh masuk
-        $adminAliases = ['admin', 'administrator', 'superadmin'];
-        if (in_array($userRole, $adminAliases, true)) {
-            return $next($request);
-        }
+        $allowed = array_values(array_filter(array_map(function ($r) {
+            return strtolower(trim((string) $r));
+        }, $roles)));
 
         if (!in_array($userRole, $allowed, true)) {
-            abort(403, 'Anda tidak berhak mengakses halaman ini.');
+            abort(403, 'Akses ditolak.');
         }
 
         return $next($request);

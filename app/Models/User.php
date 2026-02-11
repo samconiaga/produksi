@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -12,37 +11,41 @@ class User extends Authenticatable
 {
     use HasApiTokens, HasFactory, Notifiable;
 
-    /**
-     * Kolom yang boleh di-mass assign.
-     */
     protected $fillable = [
         'name',
         'email',
         'role',
+        'produksi_role',
         'password',
-        'email_verified_at', // biar bisa di-set saat create()
+        'email_verified_at',
+
+        // QC
+        'qc_level',
+        'qc_signature_path',
     ];
 
-    /**
-     * Relasi ke Kelas (jika dipakai).
-     */
-    public function kelas()
-    {
-        return $this->hasMany(Kelas::class);
-    }
-
-    /**
-     * Kolom yang disembunyikan saat serialisasi.
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Casting atribut.
-     */
     protected $casts = [
         'email_verified_at' => 'datetime',
     ];
+
+    /* ================= PRODUKSI HELPER ================= */
+    public function isProduksiAdmin()
+    {
+        return $this->role === 'Produksi' && $this->produksi_role === 'ADMIN';
+    }
+
+    public function isProduksiSPV()
+    {
+        return $this->role === 'Produksi' && $this->produksi_role === 'SPV';
+    }
+
+    public function isProduksiOperator()
+    {
+        return $this->role === 'Produksi' && $this->produksi_role === 'OPERATOR';
+    }
 }

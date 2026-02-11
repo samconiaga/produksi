@@ -1,6 +1,21 @@
-@extends('layouts.app') 
+@extends('layouts.app')
 
 @section('content')
+
+@php
+  use Carbon\Carbon;
+
+  // Format tanggal biar gak ada "00:00:00"
+  $fmtDate = function ($value) {
+      if (empty($value)) return '-';
+      try {
+          return Carbon::parse($value)->format('Y-m-d');
+      } catch (\Throwable $e) {
+          return str_replace(' 00:00:00', '', (string) $value);
+      }
+  };
+@endphp
+
 <section class="app-user-list">
 
   <div class="row">
@@ -108,14 +123,14 @@
                     <span class="badge {{ $badge }}">{{ $label }}</span>
                   </td>
 
-                  <td>{{ $row->tgl_sampling ?: '-' }}</td>
+                  {{-- FIX: tampilkan tanggal tanpa jam --}}
+                  <td>{{ $fmtDate($row->tgl_sampling) }}</td>
 
                   <td class="text-center">
                     <div class="d-flex flex-column flex-lg-row gap-50 justify-content-center">
 
                       {{-- ACC: set status_sampling = accepted, tetap di index --}}
-                      <form method="POST"
-                            action="{{ route('sampling.acc', $row->id) }}">
+                      <form method="POST" action="{{ route('sampling.acc', $row->id) }}">
                         @csrf
                         <button type="submit"
                                 class="btn btn-sm btn-outline-success"
@@ -125,8 +140,7 @@
                       </form>
 
                       {{-- KONFIRMASI: pindah ke Riwayat + kirim ke Review --}}
-                      <form method="POST"
-                            action="{{ route('sampling.confirm', $row->id) }}">
+                      <form method="POST" action="{{ route('sampling.confirm', $row->id) }}">
                         @csrf
                         <button type="submit"
                                 class="btn btn-sm btn-success"
@@ -137,8 +151,7 @@
                       </form>
 
                       {{-- Reject: langsung final, pindah ke Riwayat --}}
-                      <form method="POST"
-                            action="{{ route('sampling.reject', $row->id) }}">
+                      <form method="POST" action="{{ route('sampling.reject', $row->id) }}">
                         @csrf
                         <button type="submit"
                                 class="btn btn-sm btn-outline-danger"

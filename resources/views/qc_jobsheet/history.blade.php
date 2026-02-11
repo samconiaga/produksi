@@ -2,18 +2,26 @@
 
 @section('content')
 
-{{-- Styling khusus halaman ini --}}
+@php
+  use Carbon\Carbon;
+
+  $fmtDate = function ($value) {
+      if (empty($value)) return '-';
+      try {
+          return Carbon::parse($value)->format('Y-m-d');
+      } catch (\Throwable $e) {
+          return str_replace(' 00:00:00', '', (string) $value);
+      }
+  };
+@endphp
+
 <style>
-  /* Biar catatan review nggak terlalu tinggi tapi cukup lebar */
   .col-catatan-review {
       max-width: 420px;
-      white-space: normal;   /* boleh wrap, tapi di area yang lebar */
+      white-space: normal;
   }
-
   @media (min-width: 1400px) {
-      .col-catatan-review {
-          max-width: 520px;
-      }
+      .col-catatan-review { max-width: 520px; }
   }
 </style>
 
@@ -26,14 +34,13 @@
         {{-- Header --}}
         <div class="card-header d-flex justify-content-between align-items-center">
           <div>
-            <h4 class="card-title mb-0">Riwayat Job Sheet QC</h4>
+            <h4 class="card-title mb-0">Riwayat Job Sheet</h4>
             <p class="mb-0 text-muted">
-              Menampilkan Job Sheet QC yang sudah dikonfirmasi oleh QC.
+              Menampilkan Job Sheet yang sudah dikonfirmasi.
             </p>
           </div>
 
-          <a href="{{ route('qc-jobsheet.index') }}"
-             class="btn btn-sm btn-outline-secondary">
+          <a href="{{ route('qc-jobsheet.index') }}" class="btn btn-sm btn-outline-secondary">
             &laquo; Kembali ke Daftar Aktif
           </a>
         </div>
@@ -136,9 +143,10 @@
                 <td>{{ $row->bulan }}</td>
                 <td>{{ $row->tahun }}</td>
 
-                <td>{{ $row->wo_date ?: '-' }}</td>
-                <td>{{ $row->tgl_konfirmasi_produksi ?: '-' }}</td>
-                <td>{{ $row->tgl_terima_jobsheet ?: '-' }}</td>
+                {{-- FIX: hilangkan jam 00:00:00 --}}
+                <td>{{ $fmtDate($row->wo_date) }}</td>
+                <td>{{ $fmtDate($row->tgl_konfirmasi_produksi) }}</td>
+                <td>{{ $fmtDate($row->tgl_terima_jobsheet) }}</td>
 
                 <td>
                   <span class="badge {{ $badgeClass }}">{{ $statusText }}</span>
@@ -146,9 +154,7 @@
 
                 <td class="col-catatan-review">
                   @if($catatanFull)
-                    {{-- ditampilkan singkat, full-nya ada di tooltip title --}}
-                    <div class="small text-muted"
-                         title="{{ $catatanFull }}">
+                    <div class="small text-muted" title="{{ $catatanFull }}">
                       {{ $catatanShort }}
                     </div>
                   @else
@@ -159,7 +165,7 @@
             @empty
               <tr>
                 <td colspan="10" class="text-center text-muted">
-                  Belum ada riwayat Job Sheet QC.
+                  Belum ada riwayat Job Sheet.
                 </td>
               </tr>
             @endforelse

@@ -8,9 +8,9 @@
 
         <div class="card-header d-flex justify-content-between align-items-center">
           <div>
-            <h4 class="card-title mb-0">Job Sheet QC</h4>
+            <h4 class="card-title mb-0">Job Sheet </h4>
             <p class="mb-0 text-muted">
-              Isi data Job Sheet setelah Qty Batch dikonfirmasi.
+              Isi data Job Sheet.
             </p>
           </div>
 

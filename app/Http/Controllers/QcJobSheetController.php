@@ -24,17 +24,14 @@ class QcJobSheetController extends Controller
 
             ->where(function ($qb) {
                 $qb
-                    // belum pernah dikirim ke review
                     ->whereNull('status_jobsheet')
                     ->orWhere('status_jobsheet', 'pending')
-                    // atau sudah dikirim tapi di-HOLD saat review
                     ->orWhere(function ($q2) {
                         $q2->where('status_jobsheet', 'done')
                            ->where('status_review', 'hold');
                     });
             })
 
-            // search
             ->when($q !== '', function ($qb) use ($q) {
                 $qb->where(function ($sub) use ($q) {
                     $sub->where('nama_produk', 'like', "%{$q}%")
@@ -43,12 +40,10 @@ class QcJobSheetController extends Controller
                 });
             })
 
-            // filter bulan
             ->when($bulan !== null && $bulan !== '', function ($qb) use ($bulan) {
                 $qb->where('bulan', (int) $bulan);
             })
 
-            // filter tahun
             ->when($tahun !== null && $tahun !== '', function ($qb) use ($tahun) {
                 $qb->where('tahun', (int) $tahun);
             })

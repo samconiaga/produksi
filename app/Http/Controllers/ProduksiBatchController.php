@@ -2,16 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Controllers\Controller;
 use App\Models\Produksi;
 use App\Models\ProduksiBatch;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
-// composer require phpoffice/phpspreadsheet
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
-use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use Carbon\Carbon;
 
 class ProduksiBatchController extends Controller
@@ -25,9 +22,8 @@ class ProduksiBatchController extends Controller
         $bulan   = $request->get('bulan');
         $tahun   = $request->get('tahun');
         $perPage = (int) $request->get('per_page', 25);
-        if ($perPage <= 0) {
-            $perPage = 25;
-        }
+
+        if ($perPage <= 0) $perPage = 25;
 
         $rows = ProduksiBatch::with('produksi')
             ->when($q !== '', function ($qb) use ($q) {
@@ -37,7 +33,7 @@ class ProduksiBatchController extends Controller
                         ->orWhere('kode_batch', 'like', "%{$q}%");
                 });
             })
-            ->when($bulan !== null && $bulan !== '', function ($qb) use ($bulan) {
+            ->when($bulan !== null && $bulan !== '' && $bulan !== 'all', function ($qb) use ($bulan) {
                 $qb->where('bulan', (int) $bulan);
             })
             ->when($tahun !== null && $tahun !== '', function ($qb) use ($tahun) {
@@ -47,22 +43,24 @@ class ProduksiBatchController extends Controller
             ->orderBy('bulan')
             ->orderBy('wo_date')
             ->orderBy('id')
-            ->paginate($perPage);
+            ->paginate($perPage)
+            ->withQueryString();
 
-        return view('produksi_batches.index', compact(
-            'rows',
-            'q',
-            'perPage',
-            'bulan',
-            'tahun'
-        ));
+        return view('produksi_batches.index', compact('rows', 'q', 'perPage', 'bulan', 'tahun'));
     }
 
     /* =========================================================
-     * PROSES UPLOAD EXCEL (Jadwal WO + Weighing)
+     * PROSES UPLOAD EXCEL (Jadwal WO)
+     * ✅ no_batch = WO NO (full, tidak diubah)
+     * ✅ kode_batch = HANYA "100.01 FA" (dipotong dari WO NO)
+     * ✅ Weighing otomatis (tidak menimpa yg sudah ada)
+     * ✅ expected_date minimal = wo_date
      * =======================================================*/
     public function upload(Request $request)
     {
+        @set_time_limit(300);
+        DB::disableQueryLog();
+
         $request->validate([
             'file' => ['required', 'file', 'mimes:xls,xlsx'],
         ]);
@@ -72,107 +70,145 @@ class ProduksiBatchController extends Controller
         DB::beginTransaction();
         try {
             $spreadsheet = IOFactory::load($file->getRealPath());
-            $sheet       = $spreadsheet->getActiveSheet();
-            $highestRow  = $sheet->getHighestRow();
+            $sheet = $spreadsheet->getActiveSheet();
 
-            // ==============================================
-            // 1. BACA HEADER ROW → CARI INDEX KOLOM
-            // ==============================================
-            $highestCol      = $sheet->getHighestColumn();
-            $highestColIndex = Coordinate::columnIndexFromString($highestCol);
+            $data = $sheet->toArray(null, true, true, true);
 
-            $cols = [
-                'wo_no'        => null,
-                'description'  => null,
-                'nama_product' => null,
-                'wo_date'      => null,
-                'expected'     => null,
-                'batch'        => null,
-                'item_desc'    => null,
-            ];
-
-            for ($col = 1; $col <= $highestColIndex; $col++) {
-                $colLetter = Coordinate::stringFromColumnIndex($col);
-                $header    = strtoupper(trim((string) $sheet->getCell($colLetter . '1')->getValue()));
-
-                if ($header === '') {
-                    continue;
-                }
-
-                if (strpos($header, 'WO NO') !== false) {
-                    $cols['wo_no'] = $col;
-                } elseif (strpos($header, 'DESCRIPTION') !== false) {
-                    $cols['description'] = $col;
-                } elseif (strpos($header, 'NAMA PRODUCT') !== false || strpos($header, 'NAMA PRODUK') !== false) {
-                    $cols['nama_product'] = $col;
-                } elseif (strpos($header, 'WO DATE') !== false) {
-                    $cols['wo_date'] = $col;
-                } elseif (strpos($header, 'EXPECTED') !== false) {
-                    $cols['expected'] = $col;
-                } elseif (strpos($header, 'BATCH') !== false) {
-                    $cols['batch'] = $col;
-                } elseif (strpos($header, 'ITEM DESCRIPTION') !== false) {
-                    $cols['item_desc'] = $col;
-                }
+            if (count($data) < 2) {
+                throw new \RuntimeException('File Excel kosong / tidak ada data.');
             }
 
-            // Minimal: harus ada WO No & WO Date
-            if (! $cols['wo_no'] || ! $cols['wo_date']) {
-                throw new \RuntimeException('Format header Excel tidak sesuai (WO No / WO Date tidak ditemukan).');
-            }
+            // =========================
+            // 1) Detect header row (row 1)
+            // =========================
+            $header = $data[1];
 
-            // Helper ambil nilai cell berdasarkan index kolom
-            $getCell = function (int $colIndex, int $row) use ($sheet) {
-                $letter = Coordinate::stringFromColumnIndex($colIndex);
-                return $sheet->getCell($letter . $row)->getValue();
+            $findCol = function (array $headerRow, array $needles) {
+                foreach ($headerRow as $colLetter => $val) {
+                    $raw = (string) $val;
+                    $h   = strtoupper(trim($raw));
+                    if ($h === '') continue;
+
+                    $hn = str_replace([' ', '_', '.', '-', "\n", "\r", "\t"], '', $h);
+
+                    foreach ($needles as $needle) {
+                        $n  = strtoupper((string) $needle);
+                        $nn = str_replace([' ', '_', '.', '-', "\n", "\r", "\t"], '', $n);
+
+                        if (strpos($h, $n) !== false || strpos($hn, $nn) !== false) {
+                            return $colLetter;
+                        }
+                    }
+                }
+                return null;
             };
 
-            // ==============================================
-            // 2. LOOP ISI DATA
-            // ==============================================
-            for ($row = 2; $row <= $highestRow; $row++) {
-                $woNo        = trim((string) $getCell($cols['wo_no'], $row));
-                $description = $cols['description']
-                    ? trim((string) $getCell($cols['description'], $row))
-                    : '';
-                $namaProdukC = $cols['nama_product']
-                    ? trim((string) $getCell($cols['nama_product'], $row))
-                    : '';
+            $colWoNo   = $findCol($header, ['WO NO', 'WONO', 'WORK ORDER', 'WORKORDER', 'WO']);
+            $colDesc   = $findCol($header, ['DESCRIPTION', 'DESC', 'KETERANGAN']);
+            $colNama   = $findCol($header, ['NAMA PRODUCT', 'NAMA PRODUK', 'PRODUCT', 'PRODUK']);
 
-                $woDateRaw   = $getCell($cols['wo_date'], $row);
-                $expectedRaw = $cols['expected']
-                    ? $getCell($cols['expected'], $row)
-                    : null;
+            $colWoDate = $findCol($header, [
+                'WO DATE','WODATE','WO_DT','WODT','W/O DATE',
+                'TGL WO','TANGGAL WO','WORK ORDER DATE','WORKORDERDATE','TANGGALWO'
+            ]);
 
-                $batchExcel  = $cols['batch']
-                    ? trim((string) $getCell($cols['batch'], $row))
-                    : '';
-                $itemDesc    = $cols['item_desc']
-                    ? trim((string) $getCell($cols['item_desc'], $row))
-                    : '';
+            $colExp    = $findCol($header, [
+                'EXPECTED', 'EXPECTED DATE', 'EXPECTEDDATE',
+                'EXP DATE', 'EXPDATE',
+                'ETD', 'DUE DATE', 'DUEDATE',
+                'PLAN DATE', 'PLANDATE',
+                'TGL EXPECTED', 'TANGGAL EXPECTED', 'TANGGALEXPECTED'
+            ]);
 
-                // Baris kosong → skip
-                if ($woNo === '' && $description === '' && $namaProdukC === '') {
-                    continue;
+            $colItem   = $findCol($header, ['ITEM DESCRIPTION', 'ITEM DESC', 'ITEM', 'ITEMDESC']);
+
+            if (!$colWoNo) {
+                throw new \RuntimeException('Format header Excel tidak sesuai (WO No tidak ditemukan).');
+            }
+
+            // =========================
+            // 2) Preload master produk (tetap dipakai utk nama/tipe_alur)
+            // =========================
+            $masters = Produksi::select('id', 'kode_produk', 'nama_produk', 'tipe_alur')->get();
+
+            $masterByKode = [];
+            $masterByNamaExact = [];
+
+            foreach ($masters as $m) {
+                $k = trim((string) $m->kode_produk);
+                if ($k !== '') {
+                    $masterByKode[(string)((int)$k)] = $m;
                 }
 
-                // Baris “RENCANA …” tidak disimpan
+                $n = mb_strtolower(trim((string) $m->nama_produk));
+                if ($n !== '') $masterByNamaExact[$n] = $m;
+            }
+
+            // =========================
+            // 3) Collect WO No for preload existing
+            // =========================
+            $noBatchList = [];
+            $maxRow = count($data);
+
+            for ($row = 2; $row <= $maxRow; $row++) {
+                $r = $data[$row] ?? null;
+                if (!$r) continue;
+
+                $woNo = trim((string) ($r[$colWoNo] ?? ''));
+                if ($woNo === '') continue;
+
+                $description = trim((string) ($colDesc ? ($r[$colDesc] ?? '') : ''));
+                $namaProdukC = trim((string) ($colNama ? ($r[$colNama] ?? '') : ''));
+
                 $cekRencana = strtoupper($woNo . ' ' . $description . ' ' . $namaProdukC);
-                if (strpos($cekRencana, 'RENCANA') !== false) {
-                    continue;
-                }
+                if (strpos($cekRencana, 'RENCANA') !== false) continue;
 
-                // Pilih nama produk yang paling rapi:
-                // prioritas: Item Description → Nama Product → Description
-                $namaExcel = $itemDesc !== ''
-                    ? $itemDesc
-                    : ($namaProdukC !== '' ? $namaProdukC : $description);
+                $noBatchList[] = $woNo; // no_batch tetap FULL woNo
+            }
 
-                // Parse tanggal
+            $noBatchList = array_values(array_unique($noBatchList));
+
+            $existingMap = collect();
+            if (!empty($noBatchList)) {
+                $existingMap = ProduksiBatch::whereIn('no_batch', $noBatchList)->get()->keyBy('no_batch');
+            }
+
+            // =========================
+            // 4) Build payload upsert
+            // =========================
+            $payload = [];
+            $now = now();
+
+            for ($row = 2; $row <= $maxRow; $row++) {
+                $r = $data[$row] ?? null;
+                if (!$r) continue;
+
+                $woNo        = trim((string) ($r[$colWoNo] ?? ''));
+                $description = trim((string) ($colDesc ? ($r[$colDesc] ?? '') : ''));
+                $namaProdukC = trim((string) ($colNama ? ($r[$colNama] ?? '') : ''));
+
+                if ($woNo === '' && $description === '' && $namaProdukC === '') continue;
+
+                $cekRencana = strtoupper($woNo . ' ' . $description . ' ' . $namaProdukC);
+                if (strpos($cekRencana, 'RENCANA') !== false) continue;
+
+                $woDateRaw   = $colWoDate ? ($r[$colWoDate] ?? null) : null;
+                $expectedRaw = $colExp    ? ($r[$colExp] ?? null) : null;
+
+                $itemDesc    = trim((string) ($colItem ? ($r[$colItem] ?? '') : ''));
+
+                // nama prioritas: item_desc -> nama_product -> description
+                $namaExcel = $itemDesc !== '' ? $itemDesc : ($namaProdukC !== '' ? $namaProdukC : $description);
+
+                // parse tanggal
                 $woDate       = $this->parseExcelDate($woDateRaw);
                 $expectedDate = $this->parseExcelDate($expectedRaw);
 
-                // Bulan & Tahun dari WO Date (kalau ada)
+                $autoDate = $woDate ?: $expectedDate ?: now()->format('Y-m-d');
+
+                if (!$woDate) $woDate = $autoDate;
+                if (!$expectedDate) $expectedDate = $woDate;
+
                 $bulan = null;
                 $tahun = null;
                 if ($woDate) {
@@ -180,132 +216,128 @@ class ProduksiBatchController extends Controller
                     $tahun = (int) date('Y', strtotime($woDate));
                 }
 
-                // ===============================
-                // PARSE WO NO → kode batch & batch_ke
-                // ===============================
+                // =====================================================
+                // ✅ INI INTI PERMINTAAN KAMU:
+                // no_batch = WO NO FULL (biarin tetap)
+                // kode_batch = DIPOTONG jadi "100.01 FA" aja
+                // =====================================================
                 $noBatch   = $woNo;
-                $kodeBatch = $batchExcel ?: $woNo; // default fallback
-                $batchKe   = 1;
+                $kodeBatch = $this->extractKodeBatch($woNo);
 
-                if (preg_match('/^\s*(\d+)\.(\d+)\s*EA/i', $woNo, $m)) {
-                    $kodeProdukWo = (int) $m[1];           // 20
-                    $batchKe      = (int) $m[2];           // 3
-                    $kodeBatch    = sprintf('%d%02d EA', $kodeProdukWo, $batchKe); // 2003 EA
+                // parsing ringan untuk batch_ke/kode_produk (buat match master)
+                $batchKe      = 1;
+                $kodeProdukWo = null;
+                if (preg_match('/^\s*(\d+)\.(\d+)\b/i', $woNo, $m)) {
+                    $kodeProdukWo = (string) $m[1];
+                    $batchKe      = (int) $m[2];
                 }
 
-                // ============= SINKRON KE MASTER PRODUK =============
-                // Normalisasi nama produk dari Excel
-                $namaForMatch = mb_strtolower(trim($namaExcel));
+                $old = $existingMap[$noBatch] ?? null;
 
-                // 1) Cocokkan exact (case-insensitive)
-                $master = Produksi::whereRaw('LOWER(TRIM(nama_produk)) = ?', [$namaForMatch])->first();
+                // =========================
+                // MATCH master (tetap)
+                // =========================
+                $master = null;
 
-                // 2) Kalau belum ketemu, coba nama yang diawali teks tsb
-                if (! $master) {
-                    $master = Produksi::whereRaw('LOWER(nama_produk) LIKE ?', [$namaForMatch . '%'])
-                        ->first();
+                if ($kodeProdukWo !== null) {
+                    $k = (string) ((int) $kodeProdukWo);
+                    if (isset($masterByKode[$k])) $master = $masterByKode[$k];
                 }
 
-                // 3) Kalau masih belum ketemu, coba yang mengandung teks tsb
-                if (! $master) {
-                    $master = Produksi::whereRaw('LOWER(nama_produk) LIKE ?', ['%' . $namaForMatch . '%'])
-                        ->first();
-                }
-
-                $namaSinkron = $master ? $master->nama_produk : $namaExcel;
-                $tipeAlur    = $master ? $master->tipe_alur    : null;
-                $produksiId  = $master ? $master->id           : null;
-
-                // Cek apakah batch ini sudah pernah diimport
-                $batch = ProduksiBatch::where('no_batch', $noBatch)->first();
-
-                if (! $batch) {
-                    // BATCH BARU
-                    ProduksiBatch::create([
-                        'no_batch'   => $noBatch,
-                        'kode_batch' => $kodeBatch,
-
-                        'nama_produk' => $namaSinkron,
-                        'produksi_id' => $produksiId,
-                        'batch_ke'    => $batchKe,
-                        'bulan'       => $bulan,
-                        'tahun'       => $tahun,
-                        'tipe_alur'   => $tipeAlur,
-
-                        'wo_date'       => $woDate,
-                        'expected_date' => $expectedDate,
-
-                        'tgl_mulai_weighing' => null,
-                        'tgl_weighing'       => $woDate,
-
-                        'tgl_mulai_mixing'          => null,
-                        'tgl_mixing'                => null,
-                        'tgl_mulai_capsule_filling' => null,
-                        'tgl_capsule_filling'       => null,
-                        'tgl_mulai_tableting'       => null,
-                        'tgl_tableting'             => null,
-                        'tgl_mulai_coating'         => null,
-                        'tgl_coating'               => null,
-                        'tgl_mulai_primary_pack'    => null,
-                        'tgl_primary_pack'          => null,
-                        'tgl_mulai_secondary_pack_1'=> null,
-                        'tgl_secondary_pack_1'      => null,
-                        'tgl_mulai_secondary_pack_2'=> null,
-                        'tgl_secondary_pack_2'      => null,
-
-                        'tgl_datang_granul'        => null,
-                        'tgl_analisa_granul'       => null,
-                        'tgl_rilis_granul'         => null,
-                        'tgl_datang_tablet'        => null,
-                        'tgl_analisa_tablet'       => null,
-                        'tgl_rilis_tablet'         => null,
-                        'tgl_datang_ruahan'        => null,
-                        'tgl_analisa_ruahan'       => null,
-                        'tgl_rilis_ruahan'         => null,
-                        'tgl_datang_ruahan_akhir'  => null,
-                        'tgl_analisa_ruahan_akhir' => null,
-                        'tgl_rilis_ruahan_akhir'   => null,
-
-                        'qty_batch'         => null,
-                        'status_qty_batch'  => null,
-                        'tgl_konfirmasi_produksi' => null,
-                        'tgl_terima_jobsheet'     => null,
-                        'status_jobsheet'         => null,
-                        'catatan_jobsheet'        => null,
-                        'tgl_sampling'            => null,
-                        'status_sampling'         => null,
-                        'catatan_sampling'        => null,
-                        'tgl_qc_kirim_coa'        => null,
-                        'tgl_qa_terima_coa'       => null,
-                        'status_coa'              => null,
-                        'catatan_coa'             => null,
-                        'status_review'           => null,
-                        'tgl_review'              => null,
-                        'catatan_review'          => null,
-
-                        'hari_kerja'    => null,
-                        'status_proses' => null,
-                    ]);
-                } else {
-                    // BATCH SUDAH ADA → update header saja
-                    $updateData = [
-                        'nama_produk'   => $namaSinkron,
-                        'produksi_id'   => $produksiId,
-                        'batch_ke'      => $batchKe,
-                        'kode_batch'    => $kodeBatch,
-                        'bulan'         => $bulan,
-                        'tahun'         => $tahun,
-                        'tipe_alur'     => $tipeAlur,
-                        'wo_date'       => $woDate,
-                        'expected_date' => $expectedDate,
-                    ];
-
-                    if (! $batch->tgl_weighing && $woDate) {
-                        $updateData['tgl_weighing'] = $woDate;
+                if (!$master) {
+                    $key = mb_strtolower(trim($namaExcel));
+                    if ($key !== '' && isset($masterByNamaExact[$key])) {
+                        $master = $masterByNamaExact[$key];
                     }
-
-                    $batch->update($updateData);
                 }
+
+                if (!$master) {
+                    $namaForMatch = mb_strtolower(trim($namaExcel));
+                    if ($namaForMatch !== '') {
+                        $master = Produksi::whereRaw('LOWER(TRIM(nama_produk)) = ?', [$namaForMatch])->first();
+                        if (!$master) $master = Produksi::whereRaw('LOWER(nama_produk) LIKE ?', [$namaForMatch . '%'])->first();
+                        if (!$master) $master = Produksi::whereRaw('LOWER(nama_produk) LIKE ?', ['%' . $namaForMatch . '%'])->first();
+                    }
+                }
+
+                $namaFinal       = $master ? $master->nama_produk : $namaExcel;
+                $tipeAlurFinal   = $master ? $master->tipe_alur   : null;
+                $produksiIdFinal = $master ? $master->id          : null;
+
+                if ($old && !$master) {
+                    $namaFinal       = $old->nama_produk ?: $namaFinal;
+                    $tipeAlurFinal   = $old->tipe_alur;
+                    $produksiIdFinal = $old->produksi_id;
+                }
+
+                $tglWeighing = ($old && $old->tgl_weighing) ? $old->tgl_weighing : $autoDate;
+
+                $payload[] = [
+                    'no_batch'      => $noBatch,     // FULL
+                    'kode_batch'    => $kodeBatch,   // DIPOTONG: "100.01 FA"
+
+                    'nama_produk'   => $namaFinal,
+                    'produksi_id'   => $produksiIdFinal,
+                    'batch_ke'      => $batchKe,
+                    'bulan'         => $bulan,
+                    'tahun'         => $tahun,
+                    'tipe_alur'     => $tipeAlurFinal,
+
+                    'wo_date'       => $woDate,
+                    'expected_date' => $expectedDate,
+                    'tgl_weighing'  => $tglWeighing,
+
+                    'updated_at'    => $now,
+                    'created_at'    => $now,
+                ];
+            }
+
+            // =========================
+            // 5) Upsert
+            // =========================
+            if (!empty($payload)) {
+                $uniqueBy = ['no_batch'];
+                $updateCols = [
+                    'kode_batch',
+                    'nama_produk',
+                    'produksi_id',
+                    'batch_ke',
+                    'bulan',
+                    'tahun',
+                    'tipe_alur',
+                    'wo_date',
+                    'expected_date',
+                    'tgl_weighing',
+                    'updated_at',
+                ];
+
+                foreach (array_chunk($payload, 500) as $chunk) {
+                    ProduksiBatch::upsert($chunk, $uniqueBy, $updateCols);
+                }
+            }
+
+            // =========================
+            // 6) Safety net: pastikan tgl_weighing tidak null
+            // =========================
+            if (!empty($noBatchList)) {
+                ProduksiBatch::whereIn('no_batch', $noBatchList)
+                    ->whereNull('tgl_weighing')
+                    ->update([
+                        'tgl_weighing' => now()->format('Y-m-d'),
+                        'updated_at'   => now(),
+                    ]);
+            }
+
+            // =========================
+            // 7) Safety net: pastikan expected_date tidak null
+            // =========================
+            if (!empty($noBatchList)) {
+                ProduksiBatch::whereIn('no_batch', $noBatchList)
+                    ->whereNull('expected_date')
+                    ->update([
+                        'expected_date' => DB::raw('wo_date'),
+                        'updated_at'    => now(),
+                    ]);
             }
 
             DB::commit();
@@ -320,6 +352,21 @@ class ProduksiBatchController extends Controller
                 ->withErrors(['file' => 'Gagal memproses file: ' . $e->getMessage()])
                 ->withInput();
         }
+    }
+
+    /* =========================================================
+     * BULK DELETE (hapus banyak sekaligus)
+     * =======================================================*/
+    public function bulkDelete(Request $request)
+    {
+        $data = $request->validate([
+            'ids'   => ['required', 'array', 'min:1'],
+            'ids.*' => ['integer', 'exists:produksi_batches,id'],
+        ]);
+
+        ProduksiBatch::whereIn('id', $data['ids'])->delete();
+
+        return back()->with('ok', 'Batch terpilih berhasil dihapus.');
     }
 
     /* =========================================================
@@ -379,6 +426,10 @@ class ProduksiBatchController extends Controller
             'status_proses' => ['nullable', 'string', 'max:50'],
         ]);
 
+        if (!empty($data['wo_date']) && empty($data['expected_date'])) {
+            $data['expected_date'] = $data['wo_date'];
+        }
+
         $batch->update($data);
 
         return redirect()
@@ -387,25 +438,84 @@ class ProduksiBatchController extends Controller
     }
 
     /* =========================================================
-     * HELPER PARSE TANGGAL EXCEL
+     * HELPER: ambil "100.01 FA" dari "100.01 FA-26/CP/I/1"
+     * =======================================================*/
+    private function extractKodeBatch(string $woNo): string
+    {
+        $woNo = trim($woNo);
+        // rapihin whitespace (kalau ada newline dari excel)
+        $woNo = preg_replace('/\s+/', ' ', $woNo);
+
+        // Pola utama: "100.01 FA" / "104.01 EA" di awal string
+        if (preg_match('/^\s*(\d+(?:\.\d+)?)\s*([A-Za-z]{1,10})\b/', $woNo, $m)) {
+            return trim($m[1] . ' ' . $m[2]);
+        }
+
+        // Fallback: potong sampai sebelum "-" atau "/"
+        $cut = preg_split('/[-\/]/', $woNo);
+        if (!empty($cut[0])) return trim($cut[0]);
+
+        return $woNo;
+    }
+
+    /* =========================================================
+     * HELPER PARSE TANGGAL EXCEL (SUPER KEBAL .xls/.xlsx)
      * =======================================================*/
     private function parseExcelDate($value): ?string
     {
-        if ($value === null || $value === '') {
-            return null;
+        if ($value === null) return null;
+
+        if ($value instanceof \DateTimeInterface) {
+            return Carbon::instance($value)->format('Y-m-d');
+        }
+
+        if (is_string($value)) {
+            $value = trim($value);
+            if ($value === '') return null;
+
+            if (preg_match('/^\d+,\d+$/', $value)) {
+                $value = str_replace(',', '.', $value);
+            }
+
+            if (preg_match('/^\d{1,3}(\.\d{3})+$/', $value)) {
+                $value = str_replace('.', '', $value);
+            }
+
+            $upper = strtoupper($value);
+            if (in_array($upper, ['-', 'N/A', 'NA', 'NULL'], true)) {
+                return null;
+            }
         }
 
         if (is_numeric($value)) {
             try {
                 $dt = ExcelDate::excelToDateTimeObject($value);
-                return $dt->format('Y-m-d');
+                return Carbon::instance($dt)->format('Y-m-d');
             } catch (\Throwable $e) {
-                return null;
+                // lanjut parse string
             }
         }
 
         try {
-            return Carbon::parse($value)->format('Y-m-d');
+            $str = is_string($value) ? $value : (string) $value;
+            $str = trim($str);
+            if ($str === '') return null;
+
+            $str = str_replace(['.', '/'], '-', $str);
+
+            if (preg_match('/^\d{1,2}-\d{1,2}-\d{4}$/', $str)) {
+                return Carbon::createFromFormat('d-m-Y', $str)->format('Y-m-d');
+            }
+
+            if (preg_match('/^\d{1,2}-\d{1,2}-\d{2}$/', $str)) {
+                return Carbon::createFromFormat('d-m-y', $str)->format('Y-m-d');
+            }
+
+            if (preg_match('/^\d{4}-\d{1,2}-\d{1,2}$/', $str)) {
+                return Carbon::createFromFormat('Y-m-d', $str)->format('Y-m-d');
+            }
+
+            return Carbon::parse($str)->format('Y-m-d');
         } catch (\Throwable $e) {
             return null;
         }

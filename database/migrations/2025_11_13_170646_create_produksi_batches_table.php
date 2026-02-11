@@ -14,7 +14,7 @@ return new class extends Migration
             // Relasi ke master produksi
             $table->foreignId('produksi_id')
                 ->nullable()
-                ->constrained('produksi')
+                ->constrained('produksi')   // pastikan nama tabel master: 'produksi'
                 ->nullOnDelete();
 
             /* ====================== IDENTITAS BATCH ====================== */
@@ -82,7 +82,15 @@ return new class extends Migration
             /* ===================== QC — PRODUK ANTARA GRANUL ===================== */
             $table->date('tgl_datang_granul')->nullable();
             $table->date('tgl_analisa_granul')->nullable();
+            $table->date('tgl_selesai_analisa_granul')->nullable();  // NEW
             $table->date('tgl_rilis_granul')->nullable();
+
+            // Detail kartu pelulusan produk antara
+            $table->date('granul_exp_date')->nullable();             // NEW
+            $table->decimal('granul_berat', 10, 3)->nullable();      // NEW, kg
+            $table->string('granul_no_wadah', 100)->nullable();      // NEW
+            $table->string('granul_sign_code', 191)->nullable();     // NEW
+            $table->dateTime('granul_signed_at')->nullable();        // NEW
 
             /* ===================== QC — PRODUK ANTARA TABLET ===================== */
             $table->date('tgl_datang_tablet')->nullable();

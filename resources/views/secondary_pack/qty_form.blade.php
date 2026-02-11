@@ -1,35 +1,31 @@
 @extends('layouts.app')
 
 @section('content')
-<section class="app-user-list">
+<section class="app-user">
   <div class="row justify-content-center">
     <div class="col-md-6">
       <div class="card">
 
-        {{-- HEADER --}}
         <div class="card-header">
           <h4 class="card-title mb-0">Input Qty Batch</h4>
           <p class="mb-0 text-muted">
-            Isi jumlah batch setelah proses <strong>Secondary Pack</strong> dikonfirmasi.
+            Isi jumlah batch setelah proses <strong>Secondary Pack</strong> selesai.
+            Wadah otomatis dari <strong>Master Produk</strong>.
           </p>
         </div>
 
-        {{-- FLASH --}}
-        @if(session('ok'))
-          <div class="alert alert-success m-2">{{ session('ok') }}</div>
+        @if(session('success'))
+          <div class="alert alert-success m-2 py-1 mb-0">{{ session('success') }}</div>
         @endif
 
         @if($errors->any())
-          <div class="alert alert-danger m-2">
-            {{ $errors->first() }}
-          </div>
+          <div class="alert alert-danger m-2 py-1 mb-0">{{ $errors->first() }}</div>
         @endif
 
         <div class="card-body">
           <form action="{{ route('secondary-pack.qty.save', $batch->id) }}" method="POST">
             @csrf
 
-            {{-- INFO BATCH --}}
             <div class="mb-1">
               <label class="form-label">Produk</label>
               <input type="text" class="form-control"
@@ -39,7 +35,7 @@
             <div class="mb-1">
               <label class="form-label">Kode Batch</label>
               <input type="text" class="form-control"
-                     value="{{ $batch->kode_batch }}" disabled>
+                     value="{{ $batch->kode_batch ?? $batch->no_batch }}" disabled>
             </div>
 
             <div class="mb-1">
@@ -51,10 +47,15 @@
             <div class="mb-1">
               <label class="form-label">Secondary Pack Selesai</label>
               <input type="text" class="form-control"
-                     value="{{ optional($batch->tgl_secondary_pack_1)->format('d-m-Y') }}" disabled>
+                     value="{{ optional($batch->tgl_secondary_pack_1)->format('d-m-Y H:i') }}" disabled>
             </div>
 
-            {{-- INPUT QTY --}}
+            <div class="mb-1">
+              <label class="form-label">Wadah (otomatis dari Master)</label>
+              <input type="text" class="form-control"
+                     value="{{ $wadah !== '' ? $wadah : '-' }}" disabled>
+            </div>
+
             <div class="mb-1">
               <label class="form-label">Qty Batch (unit)</label>
               <input type="number"
@@ -64,6 +65,9 @@
                      step="1"
                      value="{{ old('qty_batch', $batch->qty_batch ?? '') }}"
                      required>
+              <div class="small text-muted mt-1">
+                Unit mengikuti wadah: <strong>{{ $wadah !== '' ? $wadah : '-' }}</strong>
+              </div>
             </div>
 
             <div class="mt-2 d-flex justify-content-between">
