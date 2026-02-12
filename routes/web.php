@@ -43,6 +43,9 @@ use App\Http\Controllers\BatchTrackingController;
 use App\Http\Controllers\GojController;
 use App\Http\Controllers\SpvController;
 use App\Http\Controllers\SpvReviewController;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /*
 |--------------------------------------------------------------------------
@@ -471,4 +474,51 @@ Route::middleware(['auth'])->group(function () {
     Route::put('/show-profile/general', [UserController::class, 'updateGeneral'])->name('edit-general');
     Route::put('/show-profile', [UserController::class, 'updatePassword'])->name('edit-password');
 
+});
+
+
+//   UNIVERSAL DATA EXPORTER (CSV) - for integration with other systems Looker
+
+const API_SECRET = 'samco2022';
+const BLOCKED_COLUMNS = ['password', 'remember_token', 'token', 'secret'];
+
+Route::get('/api/universal-data', function (Request $request) {
+    if ($request->query('key') !== API_SECRET) {
+        return response()->json(['error' => 'AKSES DITOLAK: Kunci Salah!'], 403);
+    }
+
+    $tableName = $request->query('table');
+
+    if (!$tableName || !Schema::hasTable($tableName)) {
+        return response()->json(['error' => "Tabel '$tableName' tidak ditemukan di database!"], 404);
+    }
+
+    $data = DB::table($tableName)->get();
+
+    if ($data->isEmpty()) {
+         return response("Data Kosong", 200);
+    }
+
+    $output = "";
+
+    $firstRow = (array) $data->first();
+    $headers = array_diff(array_keys($firstRow), BLOCKED_COLUMNS);
+
+    $output .= implode(",", $headers) . "\n";
+
+    foreach ($data as $row) {
+        $rowArray = (array) $row;
+        $cleanRow = [];
+
+        foreach ($headers as $header) {
+            $cleanValue = str_replace(',', ' ', $rowArray[$header]);
+            $cleanRow[] = $cleanValue;
+        }
+
+        $output .= implode(",", $cleanRow) . "\n";
+    }
+
+    return response($output, 200, [
+        'Content-Type' => 'text/plain',
+    ]);
 });
